@@ -56,12 +56,9 @@ class BivariatePoisson():
 
 
 	def expected_points(self, xg1, xg2):
-		
-		poisson_matrix = self.poisson_matrix(xg1, xg2)
 
-		homewin_prob = sum(sum(np.triu(poisson_matrix, k=1)))
-		awaywin_prob = sum(sum(np.tril(poisson_matrix, k=-1)))
-		draw_prob = sum(np.diag(poisson_matrix))
+		homewin_prob, draw_prob, awaywin_prob = self.win_probabilities(xg1, xg2)
+
 
 		xpts1 = 3*homewin_prob + draw_prob
 		xpts2 = 3*awaywin_prob + draw_prob
