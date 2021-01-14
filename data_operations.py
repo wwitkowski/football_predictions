@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
 import math
+from datetime import datetime
+
 
 
 class BivariatePoisson():
-
 
 
 	@staticmethod
@@ -72,7 +73,7 @@ class FootballStatsPreparation():
 
 	def __init__(self, df, decay_factor=0.004, num_of_matches=40, null_rate=0.5):
 
-		self.df = df
+		self.data = df.copy()
 		self.decay_factor = decay_factor
 		self.num_of_matches = num_of_matches
 		self.null_rate = null_rate
@@ -107,40 +108,110 @@ class FootballStatsPreparation():
 		else:
 			return 0
 
+	def weights(self, row, date):
+		date_to_weight = datetime.strptime(row, '%Y-%m-%d')
 
-	def add_match_stats(self):
+		return math.exp(-1 * self.decay_factor * (date - date_to_weight).days)
+
+
+	def add_match_stats(self, data):
 		
 		# Add nonshot and shot expected goals average
-		self.df['avg_xg1'] = (self.df['xg1'] + self.df['nsxg1']) / 2
-		self.df['avg_xg2'] = (self.df['xg2'] + self.df['nsxg2']) / 2
+		data['avg_xg1'] = (data['xg1'] + data['nsxg1']) / 2
+		data['avg_xg2'] = (data['xg2'] + data['nsxg2']) / 2
 
-		self.df['adj_avg_xg1'] = (self.df['xg1'] + self.df['nsxg1'] + self.df['adj_score1']) / 3
-		self.df['adj_avg_xg2'] = (self.df['xg2'] + self.df['nsxg2'] + self.df['adj_score2']) / 3
+		data['adj_avg_xg1'] = (data['xg1'] + data['nsxg1'] + data['adj_score1']) / 3
+		data['adj_avg_xg2'] = (data['xg2'] + data['nsxg2'] + data['adj_score2']) / 3
 
 		# Add match result
-		self.df['result'] = self.df.apply(lambda row: self.result(row.score1, row.score2), axis=1)
+		data['result'] = data.apply(lambda row: self.result(row.score1, row.score2), axis=1)
 
 		# Add points
-		self.df['pts1'] = self.df.apply(lambda row: self.home_points(row.result), axis=1).astype('float64')
-		self.df['pts2'] = self.df.apply(lambda row: self.away_points(row.result), axis=1).astype('float64')
+		data['pts1'] = data.apply(lambda row: self.home_points(row.result), axis=1).astype('float64')
+		data['pts2'] = data.apply(lambda row: self.away_points(row.result), axis=1).astype('float64')
 
 		bp = BivariatePoisson()
 		# Add expected points based on expected goals
-		self.df['xPTS1'], self.df['xPTS2'] = zip(*self.df.apply(lambda row: bp.expected_points(row.xg1, row.xg2), axis=1))
+		data['xPTS1'], data['xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.xg1, row.xg2), axis=1))
 
 		# Add expected points based on non-shot expected goals
-		self.df['ns_xPTS1'], self.df['ns_xPTS2'] = zip(*self.df.apply(lambda row: bp.expected_points(row.nsxg1, row.nsxg2), axis=1))
+		data['ns_xPTS1'], data['ns_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.nsxg1, row.nsxg2), axis=1))
 
 		# Add expected points based on average of non shot and shot expected goals
-		self.df['avg_xPTS1'], self.df['avg_xPTS2'] = zip(*self.df.apply(lambda row: bp.expected_points(row.avg_xg1, row.avg_xg2), axis=1))
+		data['avg_xPTS1'], data['avg_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.avg_xg1, row.avg_xg2), axis=1))
 
-		return self.df
-
-
-	def add_match_features(end_date, start_date=None):
-		pass
+		return data
 
 
+	def get_past_data(self, teams_dict, past_data):
+
+		# Initialize prared stats dataframe
+		concat_data = pd.DataFrame()
+
+		# Collect data for all teams
+		for team in teams_dict.keys():
+			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(self.num_of_matches).copy()
+			concat_data = pd.concat([concat_data, team_data], ignore_index=True)
+
+		return concat_data
+
+
+	def add_match_features(self, date):
+
+
+		# Take the past data to calculate the stats
+		past_data = self.data[self.data.date < date]
+		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2'], inplace=True)
+		#past_data = self.add_match_stats(past_data) #################################### THIS HAS TO GO
+
+		# Take matchday teams data that is not used for calculating stats
+		today_data = self.data[self.data.date == date]
+
+		# Calculate average stats for home teams
+		home_teams_dict = today_data.set_index('team1').to_dict()['league']
+		home_teams_past_data = self.get_past_data(home_teams_dict, past_data)
+
+		# Calculate average stats for away teams
+		away_teams_dict = today_data.set_index('team2').to_dict()['league']
+		away_teams_past_data = self.get_past_data(away_teams_dict, past_data)
+
+		teams_past_data = pd.concat([home_teams_past_data, away_teams_past_data], ignore_index=True)
+
+		date = datetime.strptime(date, '%Y-%m-%d')
+		teams_past_data['weight'] = teams_past_data.apply(lambda row: self.weights(row.date, date), axis=1)
+		weights = teams_past_data[['team1', 'team2']].copy()
+		weights['weight'] = teams_past_data.pop('weight')
+		weighted_stats = teams_past_data.select_dtypes(include=['float64']).copy()
+
+		weighted_stats = weighted_stats.multiply(weights.weight, axis='index')
+
+		# Replace original stats with weighted stats
+		teams_past_data.drop(list(weighted_stats.columns.values), axis=1, inplace=True)
+		teams_past_data = pd.concat([teams_past_data, weighted_stats], axis=1)
+
+		# Caluclate averages
+		sum_values_home = teams_past_data.groupby(['team1']).sum()
+		sum_weights_home = weights.groupby(['team1']).sum()
+
+		sum_values_away = teams_past_data.groupby(['team2']).sum()
+		sum_weights_away = weights.groupby(['team2']).sum()
+
+		home_stats_names = [col for col in sum_values_away.columns.values if '1' in col]
+		away_stats_names = [col for col in sum_values_away.columns.values if '2' in col]
+		rename_away_stats_dict = dict(zip(home_stats_names + away_stats_names, away_stats_names + home_stats_names))
+
+		sum_values_away = sum_values_away.rename(columns=rename_away_stats_dict)
+		sum_values = sum_values_home.add(sum_values_away, fill_value=0)
+		sum_weights = sum_weights_home.add(sum_weights_away, fill_value=0)
+		avg_values = sum_values.div(sum_weights.weight, axis=0)
+
+		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
+		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
+
+		#self.get_avg_stats()
+
+
+		return today_data
 
 
 
