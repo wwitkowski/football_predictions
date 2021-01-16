@@ -3,7 +3,7 @@ from data_operations import FootballStatsPreparation
 # from models import NeuralNetworkModel
 # from stats_plot import StatsPlotter
 
-import os
+
 import pandas as pd
 
 data_url = 'D:\Download\spi_matches.csv'
@@ -12,17 +12,14 @@ stats_file_path = 'E:\GitHub\match_predictor_v3\stats.csv'
 if __name__ == "__main__":
 
 	
-	
-
-	if not os.path.isfile(stats_file_path):
 
 		# Load Five Thirty Eight dataset
 		raw_df = pd.read_csv(data_url)
-		stats = FootballStatsPreparation(raw_df, decay_factor=0.001, num_of_matches=40)
-		games = stats.add_match_features(date='2020-12-19')
-		print(raw_df)
+		stats = FootballStatsPreparation(stats_file_path, decay_factor=0.001, num_of_matches=10)
+		exclude_features = ['season', 'league_id', 'spi1', 'spi2', 'proj_score1', 'proj_score2', 'prob1', 'prob2', 'probtie', 'importance1', 'importance2']
+		stats.add_match_features(raw_df, date='2021-01-16', exclude_features=exclude_features)
 		print(stats.data)
-		print(games)
+
 
 	
 	# today_games = fdf.get_matchday(date=date)

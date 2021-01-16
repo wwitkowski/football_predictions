@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import math
+import os
 from datetime import datetime
 
 
@@ -71,9 +72,13 @@ class BivariatePoisson():
 class FootballStatsPreparation():
 
 
-	def __init__(self, df, decay_factor=0.004, num_of_matches=40, null_rate=0.5):
+	def __init__(self, save_path, decay_factor=0.004, num_of_matches=40, null_rate=0.5):
 
-		self.data = df.copy()
+		if not os.path.isfile(save_path):
+			self.data = pd.DataFrame()
+		else:
+			self.data = pd.read_csv(save_path)
+			self.most_recent_date = self.data['date'].iloc[-1]
 		self.decay_factor = decay_factor
 		self.num_of_matches = num_of_matches
 		self.null_rate = null_rate
@@ -156,16 +161,15 @@ class FootballStatsPreparation():
 		return concat_data
 
 
-	def add_match_features(self, date):
-
+	def add_match_features(self, source_data, date, exclude_features=None):
 
 		# Take the past data to calculate the stats
-		past_data = self.data[self.data.date < date]
+		past_data = source_data[source_data.date < date].copy()
 		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2'], inplace=True)
-		#past_data = self.add_match_stats(past_data) #################################### THIS HAS TO GO
+		past_data = self.add_match_stats(past_data) #################################### THIS HAS TO GO
 
 		# Take matchday teams data that is not used for calculating stats
-		today_data = self.data[self.data.date == date]
+		today_data = source_data[source_data.date == date]
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
@@ -176,18 +180,15 @@ class FootballStatsPreparation():
 		away_teams_past_data = self.get_past_data(away_teams_dict, past_data)
 
 		teams_past_data = pd.concat([home_teams_past_data, away_teams_past_data], ignore_index=True)
+		teams_past_data.drop_duplicates(inplace=True)
 
 		date = datetime.strptime(date, '%Y-%m-%d')
 		teams_past_data['weight'] = teams_past_data.apply(lambda row: self.weights(row.date, date), axis=1)
 		weights = teams_past_data[['team1', 'team2']].copy()
 		weights['weight'] = teams_past_data.pop('weight')
-		weighted_stats = teams_past_data.select_dtypes(include=['float64']).copy()
-
+		weighted_stats = teams_past_data.select_dtypes(include=['float64'])
 		weighted_stats = weighted_stats.multiply(weights.weight, axis='index')
-
-		# Replace original stats with weighted stats
-		teams_past_data.drop(list(weighted_stats.columns.values), axis=1, inplace=True)
-		teams_past_data = pd.concat([teams_past_data, weighted_stats], axis=1)
+		teams_past_data.drop(exclude_features, axis=1, inplace=True)
 
 		# Caluclate averages
 		sum_values_home = teams_past_data.groupby(['team1']).sum()
@@ -202,20 +203,14 @@ class FootballStatsPreparation():
 
 		sum_values_away = sum_values_away.rename(columns=rename_away_stats_dict)
 		sum_values = sum_values_home.add(sum_values_away, fill_value=0)
+		sum_values.to_csv('sum_values.csv')
 		sum_weights = sum_weights_home.add(sum_weights_away, fill_value=0)
+		sum_weights.to_csv('sum_weights.csv')
 		avg_values = sum_values.div(sum_weights.weight, axis=0)
 
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 
-		#self.get_avg_stats()
-
-
-		return today_data
-
-
-
-
-
+		self.data = pd.concat([self.data, today_data], sort=False, ignore_index=True)
 
 
