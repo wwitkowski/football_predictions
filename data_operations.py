@@ -68,20 +68,21 @@ class BivariatePoisson():
 		return xpts1, xpts2
 
 
+class FootballStats:
 
-class FootballStatsPreparation():
+	file_save_path = 'E:\GitHub\match_predictor_v3\stats.csv'
+	source_data_path = 'https://projects.fivethirtyeight.com/soccer-api/club/spi_matches.csv'
 
 
-	def __init__(self, save_path, decay_factor=0.004, num_of_matches=40, null_rate=0.5):
+	def __init__(self):
 
-		if not os.path.isfile(save_path):
-			self.data = pd.DataFrame()
+		if not os.path.isfile(self.file_save_path):
+			self.data = pd.read_csv(self.source_data_path)
+			drop_cols = ['prob1', 'prob2', 'probtie', 'proj_score1', 'proj_score2']
+			self.data.drop(drop_cols, axis=1, inplace=True)
 		else:
-			self.data = pd.read_csv(save_path)
-			self.most_recent_date = self.data['date'].iloc[-1]
-		self.decay_factor = decay_factor
-		self.num_of_matches = num_of_matches
-		self.null_rate = null_rate
+			self.data = pd.read_csv(self.file_save_path)
+			print('found file')
 
 
 	@staticmethod
@@ -112,15 +113,9 @@ class FootballStatsPreparation():
 			return 3
 		else:
 			return 0
+	
 
-	def weights(self, row, date):
-		date_to_weight = datetime.strptime(row, '%Y-%m-%d')
-
-		return math.exp(-1 * self.decay_factor * (date - date_to_weight).days)
-
-
-	def add_match_stats(self, data):
-		
+	def new_stats(self, data):	
 		# Add nonshot and shot expected goals average
 		data['avg_xg1'] = (data['xg1'] + data['nsxg1']) / 2
 		data['avg_xg2'] = (data['xg2'] + data['nsxg2']) / 2
@@ -137,13 +132,72 @@ class FootballStatsPreparation():
 
 		bp = BivariatePoisson()
 		# Add expected points based on expected goals
-		data['xPTS1'], data['xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.xg1, row.xg2), axis=1))
+		data['xPTS1'], data['xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.xg1, row.xg2), axis=1))	
+
+		return data
+
+
+	def one_day(self, date):
+		return self.data[self.data.date == date]
+
+
+	def update(self):
+		source_data = pd.read_csv(self.source_data_path)
+		update_cols = ['spi1', 'spi2',
+					   'score1', 'score2',
+					   'importance1', 'importance2',
+					   'xg1', 'xg2',
+					   'nsxg1', 'nsxg2',
+					   'adj_score1', 'adj_score2']
+
+		self.data[update_cols] = source_data[update_cols]
+		self.data = self.new_stats(self.data)
+
+
+	def __enter__(self):
+		return self
+
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.data.to_csv(self.file_save_path, index=False)
+
+
+
+
+
+
+class FootballStatsDataFrame():
+
+
+	def __init__(self, source_data, decay_factor=0.004, num_of_matches=40, null_rate=0.5):
+
+
+		self.source_data = source_data
+		self.save_path = 'E:\GitHub\match_predictor_v3\stats.csv'
+		if not os.path.isfile(self.save_path):
+			self.data = pd.DataFrame()
+		else:
+			self.data = pd.read_csv(self.save_path)
+		self.decay_factor = decay_factor
+		self.num_of_matches = num_of_matches
+		self.null_rate = null_rate
+
+
+
+
+	def weights(self, row, date):
+		date_to_weight = datetime.strptime(row, '%Y-%m-%d')
+
+		return math.exp(-1 * self.decay_factor * (date - date_to_weight).days)
+
+
+
 
 		# Add expected points based on non-shot expected goals
-		data['ns_xPTS1'], data['ns_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.nsxg1, row.nsxg2), axis=1))
+		#data['ns_xPTS1'], data['ns_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.nsxg1, row.nsxg2), axis=1))
 
 		# Add expected points based on average of non shot and shot expected goals
-		data['avg_xPTS1'], data['avg_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.avg_xg1, row.avg_xg2), axis=1))
+		#data['avg_xPTS1'], data['avg_xPTS2'] = zip(*data.apply(lambda row: bp.expected_points(row.avg_xg1, row.avg_xg2), axis=1))
 
 		return data
 
@@ -161,15 +215,14 @@ class FootballStatsPreparation():
 		return concat_data
 
 
-	def add_match_features(self, source_data, date, exclude_features=None):
+	def add_match_features(self, date, exclude_features=None):
 
 		# Take the past data to calculate the stats
-		past_data = source_data[source_data.date < date].copy()
+		past_data = self.source_data[self.source_data.date < date].copy()
 		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2'], inplace=True)
-		past_data = self.add_match_stats(past_data) #################################### THIS HAS TO GO
 
 		# Take matchday teams data that is not used for calculating stats
-		today_data = source_data[source_data.date == date]
+		today_data = self.source_data[self.source_data.date == date]
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
@@ -203,14 +256,16 @@ class FootballStatsPreparation():
 
 		sum_values_away = sum_values_away.rename(columns=rename_away_stats_dict)
 		sum_values = sum_values_home.add(sum_values_away, fill_value=0)
-		sum_values.to_csv('sum_values.csv')
 		sum_weights = sum_weights_home.add(sum_weights_away, fill_value=0)
-		sum_weights.to_csv('sum_weights.csv')
 		avg_values = sum_values.div(sum_weights.weight, axis=0)
 
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 
 		self.data = pd.concat([self.data, today_data], sort=False, ignore_index=True)
+
+
+	def __exit__(self):
+		self.data.to_csv(self.save_path)
 
 
