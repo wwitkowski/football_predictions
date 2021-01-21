@@ -78,11 +78,8 @@ class FootballStats:
 
 		if not os.path.isfile(self.file_save_path):
 			self.data = pd.read_csv(self.source_data_path)
-			drop_cols = ['prob1', 'prob2', 'probtie', 'proj_score1', 'proj_score2']
-			self.data.drop(drop_cols, axis=1, inplace=True)
 		else:
 			self.data = pd.read_csv(self.file_save_path)
-			print('found file')
 
 
 	@staticmethod
@@ -150,8 +147,17 @@ class FootballStats:
 					   'nsxg1', 'nsxg2',
 					   'adj_score1', 'adj_score2']
 
-		self.data[update_cols] = source_data[update_cols]
-		self.data = self.new_stats(self.data)
+		if source_data.shape[1] == self.data.shape[1]:
+			self.data = self.new_stats(self.data)
+			print(f'{self.data.shape[0]} records updated.')			
+		else:
+			last_update_date_idx = self.data.apply(pd.Series.last_valid_index).xg1
+			last_update_date = self.data.loc[last_update_date_idx].date
+			update = source_data[source_data.date > last_update_date].copy()
+			self.data = self.data[self.data.index <= last_update_date_idx]
+			update = self.new_stats(update)
+			self.data = pd.concat([self.data, update], sort=False, ignore_index=True)
+			print(f'{update.shape[0]} records updated.')	
 
 
 	def __enter__(self):

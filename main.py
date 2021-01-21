@@ -17,5 +17,5 @@ if __name__ == "__main__":
 		with FootballStats() as stats:
 			yestarday_data = stats.one_day(yestarday)[['score1']]
 			percent_missing = yestarday_data.isnull().sum() / len(yestarday_data)
-			if percent_missing.values == 1:
+			if percent_missing.values > 0.8:
 				stats.update()
