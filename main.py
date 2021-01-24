@@ -11,11 +11,10 @@ import pandas as pd
 if __name__ == "__main__":
 
 
-		yesterday = datetime.now() - timedelta(1)
-		yestarday = str(datetime.strftime(yesterday, '%Y-%m-%d'))
+		five_days_back = datetime.now() - timedelta(5)
+		five_days_back = str(datetime.strftime(five_days_back, '%Y-%m-%d'))
 
 		with FootballStats() as stats:
-			yestarday_data = stats.one_day(yestarday)[['score1']]
-			percent_missing = yestarday_data.isnull().sum() / len(yestarday_data)
-			if percent_missing.values > 0.8:
+			if stats.data.empty or stats.last_update_date < five_days_back:
 				stats.update()
+				print(stats.data)
