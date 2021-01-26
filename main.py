@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-
 from data_operations import FootballStats
 # from data_operations import Pipeline
 # from models import NeuralNetworkModel
@@ -7,14 +6,15 @@ from data_operations import FootballStats
 import pandas as pd
 
 
-
 if __name__ == "__main__":
 
+		three_days_back = datetime.now() - timedelta(3)
+		three_days_back = str(datetime.strftime(three_days_back, '%Y-%m-%d'))
 
-		five_days_back = datetime.now() - timedelta(5)
-		five_days_back = str(datetime.strftime(five_days_back, '%Y-%m-%d'))
+		today = datetime.now().strftime('%Y-%m-%d')
 
 		with FootballStats() as stats:
-			if stats.data.empty or stats.last_update_date < five_days_back:
+			if stats.data.empty or stats.last_update_date < three_days_back:
 				stats.update()
-				print(stats.data)
+			today_matchday = stats.one_day(today)
+			print(today_matchday)

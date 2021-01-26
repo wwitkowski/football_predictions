@@ -5,9 +5,11 @@ import os
 from datetime import datetime
 
 
-
-
 class FootballStats:
+	"""
+	Class for handling download data from FiveThirtyEight and Football-data dataset and joining
+	them into one pseudo api that allows to easily retrieve matches from specdific matchday (date).
+	"""
 
 	source1 = 'https://projects.fivethirtyeight.com/soccer-api/club/spi_matches.csv'
 	leagues = ['E0', 'E1', 'D1', 'D2', 'I1', 'I2', 'F1', 'N1', 'SP1', 'P1']
@@ -19,11 +21,17 @@ class FootballStats:
 
 
 	def one_day(self, date):
+		"""
+		Function returning matches for a specific matchday.
+		"""
 		return self.data[self.data.date == date]
 
 
 	@property
 	def last_update_date(self):
+		"""
+		Returns last update date. The date is found where the last not null value is.
+		"""
 		last_valid_idxs = self.data.apply(pd.Series.last_valid_index)
 		last_update_idx = min(last_valid_idxs.values)
 
@@ -31,15 +39,24 @@ class FootballStats:
 
 	
 	def update(self):
+		"""
+		Function to update the datasets with altest data.
+		"""
+
+		# Source 1 - FiveThirtyEight
 		source1_df = pd.read_csv(self.source1)
+
+		# Source 2 - Football-data
 		source2_df = pd.DataFrame()
 
+		# Pick relevant columns with used features from source 2
 		columns = ['Date', 'HomeTeam', 'AwayTeam', 
-					'Time', 'HS', 'AS', 'HST', 'AST', 
-					'HF', 'AF', 'HC', 'AC', 'HY', 
-					'AY', 'HR', 'AR', 'MaxH', 'MaxD',
-					'MaxA', 'AvgH', 'AvgD', 'AvgA']
+				'HS', 'AS', 'HST', 'AST', 
+				'HF', 'AF', 'HC', 'AC', 'HY', 
+				'AY', 'HR', 'AR', 'MaxH', 'MaxD',
+				'MaxA', 'AvgH', 'AvgD', 'AvgA']
 
+		# Load data from past season from hard drive
 		rootdir = 'Football-data\data'
 		for subdir, dirs, files in os.walk(rootdir):
 			for file in files:
@@ -57,7 +74,7 @@ class FootballStats:
 
 				source2_df = pd.concat([source2_df, data], ignore_index=True)
 
-
+		# Load data the freshest data from internet for current season
 		for league in self.leagues:
 			link = f'{self.source2}/{league}.csv'
 			data = pd.read_csv(link)
@@ -99,8 +116,6 @@ class FootballStats:
 	def __exit__(self, exc_type, exc_val, exc_tb):
 		self.data.to_csv(self.final_df_save_path, index=False)
 
-
-	
 
 
 # 	class BivariatePoisson():
