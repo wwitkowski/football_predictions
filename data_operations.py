@@ -7,11 +7,17 @@ from datetime import datetime
 
 
 class DateHandler:
+	"""
+	Class for handling the different dates.
+	"""
 
 	def __init__(self):
 		pass
 
 	def to_date(date_string):
+		"""
+		Function to convert date formats to datetime object.
+		"""
 		splitter = re.search("[./-]", date_string)[0]
 		groups = re.split("([./-])", date_string)
 		date_len = len(date_string)
@@ -25,6 +31,9 @@ class DateHandler:
 
 
 class DatasetLoader:
+	"""
+	Class for downlaoding data from given source links and saving them on hard drive.
+	"""
 
 	def __init__(self, source, save_folder):
 		self.source = source
@@ -32,6 +41,9 @@ class DatasetLoader:
 
 	
 	def load(self, link, sub_folder=False):
+		"""
+		Function loading all files either from hard drive - if they exist, or downloading from source links.
+		"""
 		file_name = link.split('/')[-1]
 		if sub_folder:
 			sub_folder = link.split('/')[-2]
@@ -51,6 +63,9 @@ class DatasetLoader:
 
 
 class Dataset(DatasetLoader):
+	"""
+	Class for handling different datasets.
+	"""
 
 	def __init__(self, source, save_folder, date_column, columns=None, rename_dict=None, sub_folder=False):
 		super().__init__(source, save_folder)
@@ -58,13 +73,24 @@ class Dataset(DatasetLoader):
 		self.columns = columns
 		self.rename_dict = rename_dict
 		self.sub_folder = sub_folder
+		self.date_column = date_column
 
 		self.concat_dataframes()
-		self.data.rename(columns={date_column: 'date'}, inplace=True)
-		self.data['date'] = self.data['date'].apply(lambda x: DateHandler.to_date(x).strftime('%Y-%m-%d'))
+		self.handle_dates()
 
+
+	def handle_dates(self):
+		"""
+		Function renaming date column to uniform name and formatting to uniform format YYYY-MM-DD.
+		"""
+		self.data.rename(columns={self.date_column: 'date'}, inplace=True)
+		self.data['date'] = self.data['date'].apply(lambda x: DateHandler.to_date(x).strftime('%Y-%m-%d'))
 	
+
 	def concat_dataframes(self):
+		"""
+		Function concatenating all dataframes from the source link.
+		"""
 		for link in self.source:
 			temp_df = self.load(link, self.sub_folder)
 			if self.columns is not None:
@@ -88,8 +114,21 @@ class Dataset(DatasetLoader):
 		return self.data[self.data.date == date]
 
 
+	def update(self):
+		"""
+		Function updating the dataset bby downloading the most recent files again.
+		"""
+		folders = [folder[0] for folder in os.walk(self.save_folder)]
+		most_recent = max(folders)
+		for file in os.listdir(most_recent):
+			os.remove(f'{most_recent}/{file}')
+		self.data = pd.DataFrame()
+		self.concat_dataframes()
+		self.handle_dates()
+
+
 	@property
-	def last_update_date(self):
+	def last_valid_date(self):
 		"""
 		Returns last update date. The date is found where the last not null value is.
 		"""
