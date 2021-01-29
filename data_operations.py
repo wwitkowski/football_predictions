@@ -4,6 +4,7 @@ import math
 import os
 import re
 from datetime import datetime
+from sources import Source1, Source2
 
 
 class DateHandler:
@@ -35,8 +36,7 @@ class DatasetLoader:
 	Class for downlaoding data from given source links and saving them on hard drive.
 	"""
 
-	def __init__(self, source, save_folder):
-		self.source = source
+	def __init__(self, save_folder):
 		self.save_folder = save_folder
 
 	
@@ -52,24 +52,22 @@ class DatasetLoader:
 			path = f'{self.save_folder}/{file_name}'
 		try:
 			data = pd.read_csv(path)
+			return data	
 		except FileNotFoundError:
-			try:
-				data = pd.read_csv(link)
-				data.to_csv(path, index=False)
-			except Exception as e:
-				print(f'Could not download the file {path}. {e}')
-
-		return data
+			data = pd.read_csv(link)
+			data.to_csv(path, index=False)
+			return data		
 
 
 class Dataset(DatasetLoader):
 	"""
-	Class for handling different datasets.
+	Class for handling csv datasets downloaded from internet.
 	"""
 
-	def __init__(self, source, save_folder, date_column, columns=None, rename_dict=None, sub_folder=False):
-		super().__init__(source, save_folder)
+	def __init__(self, save_folder, source, date_column, columns=None, rename_dict=None, sub_folder=False):
+		super().__init__(save_folder)
 		self.data = pd.DataFrame()
+		self.source = source
 		self.columns = columns
 		self.rename_dict = rename_dict
 		self.sub_folder = sub_folder
@@ -92,26 +90,21 @@ class Dataset(DatasetLoader):
 		Function concatenating all dataframes from the source link.
 		"""
 		for link in self.source:
-			temp_df = self.load(link, self.sub_folder)
-			if self.columns is not None:
-				try:
-					temp_df = temp_df[self.columns]
-				except KeyError:
-					temp_df.rename(columns=self.rename_dict, inplace=True)
+			try:
+				temp_df = self.load(link, self.sub_folder)
+				if self.columns is not None:
 					try:
 						temp_df = temp_df[self.columns]
-					except KeyError as e:
-						print(f'{link}: {e} - data skipped.')
-						continue
-
-			self.data = pd.concat([self.data, temp_df], sort=False, ignore_index=True)
-
-	
-	def one_day(self, date):
-		"""
-		Function returning matches for a specific matchday.
-		"""
-		return self.data[self.data.date == date]
+					except KeyError:
+						temp_df.rename(columns=self.rename_dict, inplace=True)
+						try:
+							temp_df = temp_df[self.columns]
+						except KeyError as e:
+							print(f'{link}: {e} - data skipped.')
+							continue
+				self.data = pd.concat([self.data, temp_df], sort=False, ignore_index=True)
+			except Exception as e:
+				print(e)
 
 
 	def update(self):
@@ -137,3 +130,52 @@ class Dataset(DatasetLoader):
 
 		return self.data.date.iloc[last_update_idx]
 
+
+class FootballStats:
+	mapping_path = 'E:\GitHub\match_predictor_v3\Football-data\mapping.csv'
+	path = 'stats.csv'
+
+	def __init__(self):
+		self.data = pd.DataFrame()
+
+
+	def load(self):
+		ds1 = Dataset(source=Source1.links, 
+					  save_folder=Source1.save_folder,
+					  date_column=Source1.date_column)
+
+		ds2 = Dataset(source=Source2.links,
+					  save_folder=Source2.save_folder,
+					  date_column=Source2.date_column,
+					  columns=Source2.columns,
+					  rename_dict=Source2.rename_dict,
+					  sub_folder=True)
+
+		# today = datetime.now().strftime('%Y-%m-%d')
+		# two_days_back = datetime.now() - timedelta(2)
+		# two_days_back = two_days_back.strftime('%Y-%m-%d')
+		# if two_days_back > min(ds1.last_valid_date, ds2.last_valid_date):
+		# 	ds1.update()
+		# 	ds2.update()
+
+		df_mapping = pd.read_csv(self.mapping_path)
+		mapping = df_mapping.set_index('replace').to_dict()['replace_with']
+
+		# Adapt team names using mapping
+		ds2.data.replace(mapping, inplace=True)
+		lkeys = ['date', 'team1', 'team2']
+		rkeys = ['date', 'HomeTeam', 'AwayTeam']
+		self.data = pd.merge(ds1.data, ds2.data, how='left', left_on=lkeys, right_on=rkeys)
+
+
+	def __enter__(self):
+		try:
+			self.data = pd.read_csv(self.path)
+		except FileNotFoundError:
+			self.load()
+		
+		return self
+
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.data.to_csv(self.path, index=False)
