@@ -195,6 +195,7 @@ class FootballStats:
 	mapping_path = 'Football-data\mapping.csv'
 	path = 'stats.csv'
 
+
 	def __init__(self):
 		self.ds1 = Dataset(source=Source1.links, 
 					  save_folder=Source1.save_folder,
@@ -308,12 +309,13 @@ class TeamStats:
 		return concat_data
 
 
-	def get_average(self, df, date, exclude_features=[]):
+	def get_past_average(self, df, date, exclude_features=[]):
 
 		# Take the past data to calculate the stats
 		past_data = df[df.date < date].copy()
 		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2'], inplace=True)
-
+		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
+		
 		# Take matchday teams data that is not used for calculating stats
 		today_data = df[df.date == date]
 
@@ -354,5 +356,6 @@ class TeamStats:
 
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
+		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
 
 		return today_data
