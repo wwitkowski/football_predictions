@@ -16,4 +16,5 @@ ts = TeamStats(decay_factor=0, num_of_matches=4)
 with FootballStats() as stats:
 	today_data = ts.get_past_average(stats.data, date=DATE, exclude_features=EXCLUDE_FEATURES)
 	print(today_data)
+	today_data.to_csv('today.csv')
 

@@ -290,6 +290,24 @@ class TeamStats:
 		self.num_of_matches = num_of_matches
 
 
+	@staticmethod
+	def stats_from_similar(present_df, past_df, by, calculate, n):
+		search_array = np.array(past_data[by])
+		input_array = np.array(today_data[by])
+		neigh = NearestNeighbors(n_neighbors=100)
+		neigh.fit(search_array)
+		
+		_, indices = neigh.kneighbors(input_array)
+		similar_df = pd.DataFrame()
+		for num, idx in enumerate(indices):
+			target = today_data[['team1', 'team2']].iloc[num]
+			result = past_data[calculate].iloc[idx].mean()
+			final = pd.concat([target, result])
+			similar_df = similar_df.append(final, ignore_index=True)
+
+		return similar_df
+
+
 	def weights(self, row, date):
 		date_to_weight = datetime.strptime(row, '%Y-%m-%d')
 
@@ -313,11 +331,15 @@ class TeamStats:
 
 		# Take the past data to calculate the stats
 		past_data = df[df.date < date].copy()
-		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2'], inplace=True)
+		past_data.dropna(subset=['score1', 'score2'], inplace=True)
+		# INVESTIGATE AND HANDLE MISSING VALUES FOR PAST MATCHES
+
 		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
 		
 		# Take matchday teams data that is not used for calculating stats
 		today_data = df[df.date == date]
+
+		similar = stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], calculate=['score1', 'score2'], n=100)
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
@@ -357,5 +379,6 @@ class TeamStats:
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
+		today_data = today_data.merge(similar, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
 
 		return today_data
