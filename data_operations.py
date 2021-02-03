@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timedelta
 from sources import Source1, Source2
+from sklearn.neighbors import NearestNeighbors
 
 
 class DateHandler:
@@ -292,16 +293,16 @@ class TeamStats:
 
 	@staticmethod
 	def stats_from_similar(present_df, past_df, by, calculate, n):
-		search_array = np.array(past_data[by])
-		input_array = np.array(today_data[by])
+		search_array = np.array(past_df[by])
+		input_array = np.array(present_df[by])
 		neigh = NearestNeighbors(n_neighbors=100)
 		neigh.fit(search_array)
 		
 		_, indices = neigh.kneighbors(input_array)
 		similar_df = pd.DataFrame()
 		for num, idx in enumerate(indices):
-			target = today_data[['team1', 'team2']].iloc[num]
-			result = past_data[calculate].iloc[idx].mean()
+			target = present_df[['team1', 'team2']].iloc[num]
+			result = past_df[calculate].iloc[idx].mean()
 			final = pd.concat([target, result])
 			similar_df = similar_df.append(final, ignore_index=True)
 
@@ -339,7 +340,7 @@ class TeamStats:
 		# Take matchday teams data that is not used for calculating stats
 		today_data = df[df.date == date]
 
-		similar = stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], calculate=['score1', 'score2'], n=100)
+		similar = self.stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], calculate=['score1', 'score2', 'xg1', 'xg2'], n=100)
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
