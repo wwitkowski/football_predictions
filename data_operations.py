@@ -210,7 +210,7 @@ class FootballStats:
 					  sub_folder=True)
 
 		today = datetime.now().strftime('%Y-%m-%d')
-		lookback_date = datetime.now() - timedelta(5)
+		lookback_date = datetime.now() - timedelta(3)
 		lookback_date = lookback_date.strftime('%Y-%m-%d')
 		print(lookback_date)
 		if lookback_date > min(self.ds1.last_valid_date, self.ds2.last_valid_date):
@@ -262,10 +262,14 @@ class FootballStats:
 		self.data['xpts1'], self.data['xpts2'] = zip(*self.data.apply(lambda row: p.expected_points(row.xg1, row.xg2), axis=1))
 
 		self.data['xgshot1'] = self.data['xg1'] / self.data['shots1']
+		self.data.xgshot1.replace([np.inf, -np.inf], 0, inplace=True)
 		self.data['xgshot2'] = self.data['xg2'] / self.data['shots2']
+		self.data.xgshot2.replace([np.inf, -np.inf], 0, inplace=True)
 
 		self.data['convrate1'] = self.data['score1'] / self.data['shots1']
+		self.data.convrate1.fillna(0, inplace=True)
 		self.data['convrate2'] = self.data['score2'] / self.data['shots2']
+		self.data.convrate2.fillna(0, inplace=True)
 
 		self.data['cards1'] = self.data['yellow1'] + 2 * self.data['red1']
 		self.data['cards2'] = self.data['yellow2'] + 2 * self.data['red2']
@@ -292,21 +296,15 @@ class TeamStats:
 
 
 	@staticmethod
-	def stats_from_similar(present_df, past_df, by, calculate, n):
+	def stats_from_similar(present_df, past_df, by, n):
 		search_array = np.array(past_df[by])
 		input_array = np.array(present_df[by])
 		neigh = NearestNeighbors(n_neighbors=100)
 		neigh.fit(search_array)
 		
 		_, indices = neigh.kneighbors(input_array)
-		similar_df = pd.DataFrame()
-		for num, idx in enumerate(indices):
-			target = present_df[['team1', 'team2']].iloc[num]
-			result = past_df[calculate].iloc[idx].mean()
-			final = pd.concat([target, result])
-			similar_df = similar_df.append(final, ignore_index=True)
-
-		return similar_df
+		
+		return indices
 
 
 	def weights(self, row, date):
@@ -323,6 +321,8 @@ class TeamStats:
 		# Collect data for all teams
 		for team in teams_dict.keys():
 			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(self.num_of_matches).copy()
+			if team_data.shape[0] != self.num_of_matches:
+				continue
 			concat_data = pd.concat([concat_data, team_data], ignore_index=True)
 
 		return concat_data
@@ -332,15 +332,22 @@ class TeamStats:
 
 		# Take the past data to calculate the stats
 		past_data = df[df.date < date].copy()
-		past_data.dropna(subset=['score1', 'score2'], inplace=True)
-		# INVESTIGATE AND HANDLE MISSING VALUES FOR PAST MATCHES
+		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'HomeTeam', 'AwayTeam'], inplace=True)
 
 		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
 		
 		# Take matchday teams data that is not used for calculating stats
 		today_data = df[df.date == date]
 
-		similar = self.stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], calculate=['score1', 'score2', 'xg1', 'xg2'], n=100)
+		similar_idxs = self.stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], n=100)
+		similar_df = pd.DataFrame()
+		for num, idx in enumerate(similar_idxs):
+			target = today_data[['team1', 'team2']].iloc[num]
+			result = past_data[['score1', 'score2', 'xg1', 'xg2']].iloc[idx].mean()
+			wins_perc = past_data['FTR'].iloc[idx].value_counts(normalize=True)
+			final = pd.concat([target, result])
+			final = pd.concat([final, wins_perc])
+			similar_df = similar_df.append(final, ignore_index=True)
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
@@ -380,6 +387,6 @@ class TeamStats:
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
-		today_data = today_data.merge(similar, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
+		today_data = today_data.merge(similar_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
 
 		return today_data
