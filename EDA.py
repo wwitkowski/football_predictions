@@ -38,12 +38,11 @@ from sklearn.preprocessing import StandardScaler
 # 			date_data = ts.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
 # 			sim_df = pd.concat([sim_df, date_data], sort=False, ignore_index=True)
 # 		except ValueError as e:
-# 			print(e)
-# 			print(stats.data[(stats.data.date == date)].league)
+# 			pass
 # 		counter += 1
 # 		print('Calculating stats... {0:.2f}% done'.format((counter / len(stats.data.date.unique())) * 100), end="\r")
 
-#sim_df.to_csv('training_data.csv', index=False)
+# sim_df.to_csv('training_data.csv', index=False)
 
 drop_features = ['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1',
 	'adj_score2', 'HomeTeam', 'AwayTeam', 'FTR', 'shots1', 'shots2', 'shotsot1',
@@ -80,28 +79,42 @@ for column in df:
 
 df.drop(['date', 'team1', 'team2', 'league'], axis=1, inplace=True)
 # features = ['adj_avg_xg2_home', 'adj_score2_home', 'avg_xg2_home', 'nsxg2_home', 'score2_home', 'xg2_home', 'xgshot2_home', 'shots2_home', 'shotsot2_home']
-features = ['adj_avg_xg1_home', 'nsxg2_home', 'xgshot1_home', 'xgshot2_home', 'shotsot1_home', 'shotsot2_home']
+features = ['xgshot1_home', 'corners1_home', 'fouls1_home', 'score1_league', 'importance1', 'spi1', 'xg1_similar', 'adj_avg_xg1_home']
 df = df[features]
 
-print(df.var())
-
-for column in df:
-	p_corr, _ = pearsonr(df[column], target.score1)
-	sp_corr, _ = spearmanr(df[column], target.score1)
-	print(f'Pearson corr {column}: {p_corr}')
-	print(f'Spearman corr {column}: {sp_corr}')
-
-
 X_train, X_val, y_train, y_val = train_test_split(df, target.score1, test_size=0.2, random_state=0)
-X_train = np.array(X_train)
-X_val = np.array(X_val)
-y_train = np.array(y_train)
-y_val = np.array(y_val)
+# X_train = np.array(X_train)
+# X_val = np.array(X_val)
+# y_train = np.array(y_train)
+# y_val = np.array(y_val)
+# sns.pairplot(X_train)
+# plt.show()
 
 # Scale data
 scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_val = scaler.transform(X_val)
+X_train = pd.DataFrame(scaler.fit_transform(X_train.values), columns=X_train.columns, index=X_train.index)
+X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, index=X_val.index)
+
+# X_train = scaler.fit_transform(X_train)
+# X_val = scaler.transform(X_val)
+
+print(X_train.var())
+print(X_train.describe())
+# sns.pairplot(X_train)
+# plt.show()
+
+for column in X_train:
+	p_corr, _ = pearsonr(X_train[column], y_train)
+	sp_corr, _ = spearmanr(X_train[column], y_train)
+	print(f'Pearson corr {column}: {p_corr}')
+	print(f'Spearman corr {column}: {sp_corr}')
+
+corr_matrx = X_train[features].corr()
+sns.heatmap(corr_matrx, annot=True, cmap="YlGnBu")
+plt.show()
+
+
+
 
 xgb_model = xgb.XGBRegressor()
 xgb_model.fit(X_train, y_train)
@@ -116,9 +129,7 @@ cb_model.fit(X_train, y_train)
 plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
 plt.show()
 
-corr_matrx = df[features].corr()
-sns.heatmap(corr_matrx, annot=True, cmap="YlGnBu")
-plt.show()
+
 
 print('xg_boost')
 y_pred = xgb_model.predict(X_val)
