@@ -65,30 +65,32 @@ df.drop(drop_features, axis=1, inplace=True)
 print(df.isna().sum().sum())
 print(df.replace([np.inf, -np.inf], np.nan).isna().sum().sum())
 
-df_strght = pd.DataFrame()
-dist = Distribution()
-for column in df:
-	if df[column].dtype == 'float64':
-		df_strght[f'strght_{column}'] = dist.straighten(df[column] + 0.001)
+# df_strght = pd.DataFrame()
+# dist = Distribution()
+# for column in df:
+# 	if df[column].dtype == 'float64':
+# 		df_strght[f'strght_{column}'] = dist.straighten(df[column] + 0.001)
 
 # df = df_strght
-# features = ['strght_adj_avg_xg1_home', 'strght_xgshot1_home', 'strght_shotsot1_home']
-# df = df[features]
-# print(df.describe())
 
 
 df.drop(['date', 'team1', 'team2', 'league'], axis=1, inplace=True)
-# features = ['adj_avg_xg2_home', 'adj_score2_home', 'avg_xg2_home', 'nsxg2_home', 'score2_home', 'xg2_home', 'xgshot2_home', 'shots2_home', 'shotsot2_home']
-features = ['xgshot1_home', 'corners1_home', 'fouls1_home', 'score1_league', 'importance1', 'spi1', 'xg1_similar', 'adj_avg_xg1_home']
+# features = ['strght_adj_avg_xg1_home', 'strght_adj_avg_xg2_home', 'strght_xgshot1_home', 'strght_xgshot2_home','strght_corners1_home', 'strght_corners2_home', 'strght_fouls1_home',
+# 			'strght_adj_avg_xg1_away', 'strght_adj_avg_xg2_away','strght_xgshot1_away', 'strght_xgshot2_away','strght_corners1_away', 'strght_corners2_away', 'strght_fouls1_away',  
+# 			'strght_importance1', 'strght_importance2', 'strght_xg1_similar', 'strght_xg2_similar', 'strght_H', 'strght_D', 'strght_A']
+features = ['adj_avg_xg1_home', 'adj_avg_xg2_home', 'xgshot1_home', 'corners1_home',
+			'adj_avg_xg1_away', 'adj_avg_xg2_away', 'xgshot1_away', 'corners1_away',
+			'spi1', 'spi2', 'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'H', 'D', 'A']
 df = df[features]
+# sns.pairplot(df)
+# plt.show()
+
 
 X_train, X_val, y_train, y_val = train_test_split(df, target.score1, test_size=0.2, random_state=0)
 # X_train = np.array(X_train)
 # X_val = np.array(X_val)
 # y_train = np.array(y_train)
 # y_val = np.array(y_val)
-# sns.pairplot(X_train)
-# plt.show()
 
 # Scale data
 scaler = StandardScaler()
@@ -125,7 +127,7 @@ xgb.plot_importance(xgb_model)
 plt.show()
 
 cb_model = CatBoostRegressor()
-cb_model.fit(X_train, y_train)
+cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
 plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
 plt.show()
 

@@ -332,7 +332,7 @@ class TeamStats:
 
 		# Take the past data to calculate the stats
 		past_data = df[df.date < date].copy()
-		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'HomeTeam', 'AwayTeam'], inplace=True)
+		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'HomeTeam', 'AwayTeam', 'shots1', 'shots2'], inplace=True)
 
 		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
 		
