@@ -340,6 +340,9 @@ class TeamStats:
 		today_data = df[df.date == date]
 
 		similar_idxs = self.stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], n=100)
+		similar_idxs_ht_rating = self.stats_from_similar(today_data, past_data, by=['spi1'], n=200)
+		similar_idxs_at_rating = self.stats_from_similar(today_data, past_data, by=['spi2'], n=200)
+
 		similar_df = pd.DataFrame()
 		for num, idx in enumerate(similar_idxs):
 			target = today_data[['team1', 'team2']].iloc[num]
@@ -348,6 +351,22 @@ class TeamStats:
 			final = pd.concat([target, result])
 			final = pd.concat([final, wins_perc])
 			similar_df = similar_df.append(final, ignore_index=True)
+
+		similar_ht_rating_df = pd.DataFrame()
+		for num, idx in enumerate(similar_idxs_ht_rating):
+			target = today_data[['team1', 'team2']].iloc[num]
+			result = past_data[['score1', 'score2', 'xg1', 'xg2']].iloc[idx].mean()
+			final = pd.concat([target, result])
+			similar_ht_rating_df = similar_ht_rating_df.append(final, ignore_index=True)
+
+		similar_at_rating_df = pd.DataFrame()
+		for num, idx in enumerate(similar_idxs_at_rating):
+			target = today_data[['team1', 'team2']].iloc[num]
+			result = past_data[['score1', 'score2', 'xg1', 'xg2']].iloc[idx].mean()
+			final = pd.concat([target, result])
+			similar_at_rating_df = similar_at_rating_df.append(final, ignore_index=True)
+
+
 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
@@ -388,5 +407,7 @@ class TeamStats:
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
 		today_data = today_data.merge(similar_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
+		today_data = today_data.merge(similar_ht_rating_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar_ht'))
+		today_data = today_data.merge(similar_at_rating_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar_at'))
 
 		return today_data
