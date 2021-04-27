@@ -24,14 +24,14 @@ from sklearn.preprocessing import StandardScaler
 # 					'season']
 
 # stats_decay_001_num_40 = TeamStats(decay_factor=0.001, num_of_matches=40)
-# stats_decay_003_num_40 = TeamStats(decay_factor=0.001, num_of_matches=60)
-# stats_decay_005_num_40 = TeamStats(decay_factor=0.001, num_of_matches=80)
-# stats_decay_010_num_40 = TeamStats(decay_factor=0.003, num_of_matches=80)
+# # stats_decay_003_num_40 = TeamStats(decay_factor=0.001, num_of_matches=60)
+# # stats_decay_005_num_40 = TeamStats(decay_factor=0.001, num_of_matches=80)
+# # stats_decay_010_num_40 = TeamStats(decay_factor=0.003, num_of_matches=80)
 
 # sim_df_decay_001_num_40 = pd.DataFrame()
-# sim_df_decay_003_num_40 = pd.DataFrame()
-# sim_df_decay_005_num_40 = pd.DataFrame()
-# sim_df_decay_010_num_40 = pd.DataFrame()
+# # sim_df_decay_003_num_40 = pd.DataFrame()
+# # sim_df_decay_005_num_40 = pd.DataFrame()
+# # sim_df_decay_010_num_40 = pd.DataFrame()
 
 # counter = 0
 
@@ -45,25 +45,25 @@ from sklearn.preprocessing import StandardScaler
 # 			date_data_decay_001_num_40 = stats_decay_001_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
 # 			sim_df_decay_001_num_40 = pd.concat([sim_df_decay_001_num_40, date_data_decay_001_num_40], sort=False, ignore_index=True)
 
-# 			date_data_decay_003_num_40 = stats_decay_003_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
-# 			sim_df_decay_003_num_40 = pd.concat([sim_df_decay_003_num_40, date_data_decay_003_num_40], sort=False, ignore_index=True)
+# 			# date_data_decay_003_num_40 = stats_decay_003_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
+# 			# sim_df_decay_003_num_40 = pd.concat([sim_df_decay_003_num_40, date_data_decay_003_num_40], sort=False, ignore_index=True)
 
-# 			date_data_decay_005_num_40 = stats_decay_005_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
-# 			sim_df_decay_005_num_40 = pd.concat([sim_df_decay_005_num_40, date_data_decay_005_num_40], sort=False, ignore_index=True)
+# 			# date_data_decay_005_num_40 = stats_decay_005_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
+# 			# sim_df_decay_005_num_40 = pd.concat([sim_df_decay_005_num_40, date_data_decay_005_num_40], sort=False, ignore_index=True)
 
-# 			date_data_decay_010_num_40 = stats_decay_010_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
-# 			sim_df_decay_010_num_40 = pd.concat([sim_df_decay_010_num_40, date_data_decay_010_num_40], sort=False, ignore_index=True)
+# 			# date_data_decay_010_num_40 = stats_decay_010_num_40.get_past_average(stats.data, date=date, exclude_features=EXCLUDE_FEATURES)
+# 			# sim_df_decay_010_num_40 = pd.concat([sim_df_decay_010_num_40, date_data_decay_010_num_40], sort=False, ignore_index=True)
 # 		except ValueError as e:
 # 			pass
 # 		counter += 1
 # 		print('Calculating stats... {0:.2f}% done'.format((counter / len(stats.data.date.unique())) * 100), end="\r")
 
-# sim_df_decay_001_num_40.to_csv('training_data_decay_001_num_40.csv', index=False)
+# sim_df_decay_001_num_40.to_csv('training_data_decay_001_num_40_luck.csv', index=False)
 # sim_df_decay_003_num_40.to_csv('training_data_decay_001_num_60.csv', index=False)
 # sim_df_decay_005_num_40.to_csv('training_data_decay_001_num_80.csv', index=False)
 # sim_df_decay_010_num_40.to_csv('training_data_decay_003_num_80.csv', index=False)
 
-drop_features = ['xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1',
+drop_features = ['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1',
 	'adj_score2', 'HomeTeam', 'AwayTeam', 'FTR', 'shots1', 'shots2', 'shotsot1',
 	'shotsot2', 'fouls1', 'fouls2', 'corners1', 'corners2', 'yellow1', 'yellow2',
 	'red1', 'red2', 'MaxH', 'MaxD', 'MaxA', 'AvgH', 'AvgD', 'AvgA', 'avg_xg1',
@@ -132,8 +132,8 @@ drop_features = ['xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1',
 
 ### Feature importance analysis ###
 
-df = pd.read_csv('training_data_decay_000_num_20.csv')
-df = df[(df['spi1'] > 60 and df['spi1'] < 80)]
+df = pd.read_csv('training_data\\training_data_decay_001_num_40_luck.csv')
+#df = df[df['spi1'] > 80]
 df.importance1.fillna(value=df.importance1.mean(), inplace=True)
 df.importance2.fillna(value=df.importance2.mean(), inplace=True)
 df.dropna(inplace=True)
@@ -157,6 +157,7 @@ print(df.replace([np.inf, -np.inf], np.nan).isna().sum().sum())
 df.drop(['date', 'team1', 'team2', 'league', 'league_id'], axis=1, inplace=True)
 
 
+
 df['adj_avg_xg1_diff'] = df['adj_avg_xg1_home'] - df['adj_avg_xg2_home']
 df['xgshot_diff'] = df['xgshot1_home'] - df['xgshot2_home']
 df['corners_diff'] = df['corners1_home'] - df['corners2_home']
@@ -169,15 +170,15 @@ df['corners_diff2'] = df['corners1_home'] - df['corners1_away']
 df['spi_diff'] = df['spi1'] - df['spi2']
 df['importance_diff'] = df['importance1'] - df['importance2']
 
-features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', 'corners1_home', 'corners2_home',
-			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', 'corners1_away', 'corners2_away',
-			'spi_diff', 'importance1', 'importance2', 'xg1_similar', 'xg2_similar']
+features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', #'corners1_home', 'corners2_home',
+			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', #'corners1_away', 'corners2_away',
+			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away']
 df = df[features]
-# sns.pairplot(df)
-# plt.show()
+
 
 
 X_train, X_val, y_train, y_val = train_test_split(df, target.score1, test_size=0.2, random_state=0)
+print(y_train)
 # X_train = np.array(X_train)
 # X_val = np.array(X_val)
 # y_train = np.array(y_train)
@@ -188,13 +189,6 @@ scaler = StandardScaler()
 X_train = pd.DataFrame(scaler.fit_transform(X_train.values), columns=X_train.columns, index=X_train.index)
 X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, index=X_val.index)
 
-# X_train = scaler.fit_transform(X_train)
-# X_val = scaler.transform(X_val)
-
-print(X_train.var())
-print(X_train.describe())
-# sns.pairplot(X_train)
-# plt.show()
 
 for column in X_train:
 	p_corr, _ = pearsonr(X_train[column], y_train)
@@ -224,6 +218,7 @@ plt.show()
 
 print('xg_boost')
 y_pred = xgb_model.predict(X_val)
+#y_pred = y_scaler.inverse_transform(y_pred)
 
 mae = tf.keras.metrics.MeanAbsoluteError()
 mae.update_state(y_pred, y_val)

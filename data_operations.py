@@ -313,15 +313,15 @@ class TeamStats:
 		return math.exp(-1 * self.decay_factor * (date - date_to_weight).days)
 
 
-	def get_past_data(self, teams_dict, past_data):
+	def get_past_data(self, teams_dict, past_data, past_matches_num):
 
 		# Initialize prared stats dataframe
 		concat_data = pd.DataFrame()
 
 		# Collect data for all teams
 		for team in teams_dict.keys():
-			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(self.num_of_matches).copy()
-			if team_data.shape[0] != self.num_of_matches:
+			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(past_matches_num).copy()
+			if team_data.shape[0] != past_matches_num:
 				continue
 			concat_data = pd.concat([concat_data, team_data], ignore_index=True)
 
@@ -366,18 +366,20 @@ class TeamStats:
 			final = pd.concat([target, result])
 			similar_at_rating_df = similar_at_rating_df.append(final, ignore_index=True)
 
-
-
+ 
 		# Calculate average stats for home teams
 		home_teams_dict = today_data.set_index('team1').to_dict()['league']
-		home_teams_past_data = self.get_past_data(home_teams_dict, past_data)
+		home_teams_past_data = self.get_past_data(home_teams_dict, past_data, self.num_of_matches)
+		home_teams_past_luck = self.get_past_data(home_teams_dict, past_data, 10)
 
 		# Calculate average stats for away teams
 		away_teams_dict = today_data.set_index('team2').to_dict()['league']
-		away_teams_past_data = self.get_past_data(away_teams_dict, past_data)
+		away_teams_past_data = self.get_past_data(away_teams_dict, past_data, self.num_of_matches)
+		away_teams_past_luck = self.get_past_data(away_teams_dict, past_data, 10)
 
 		teams_past_data = pd.concat([home_teams_past_data, away_teams_past_data], ignore_index=True)
 		teams_past_data.drop_duplicates(inplace=True)
+
 
 		date = datetime.strptime(date, '%Y-%m-%d')
 		teams_past_data['weight'] = teams_past_data.apply(lambda row: self.weights(row.date, date), axis=1)
@@ -403,8 +405,29 @@ class TeamStats:
 		sum_weights = sum_weights_home.add(sum_weights_away, fill_value=0)
 		avg_values = sum_values.div(sum_weights.weight, axis=0)
 
+
+		teams_past_luck = pd.concat([home_teams_past_luck, away_teams_past_luck], ignore_index=True)
+		teams_past_luck.drop_duplicates(inplace=True)
+
+		teams_past_luck['home_team_luck'] = teams_past_luck['score1'] - teams_past_luck['xg1']
+		teams_past_luck['away_team_luck'] = teams_past_luck['score2'] - teams_past_luck['xg2']
+		ht_avg_luck = teams_past_luck[['team1', 'home_team_luck']].groupby(['team1']).sum()
+		ht_cnt_luck = teams_past_luck[['team1', 'home_team_luck']].groupby(['team1']).count()
+		at_avg_luck = teams_past_luck[['team2', 'away_team_luck']].groupby(['team2']).sum()
+		at_cnt_luck = teams_past_luck[['team2', 'away_team_luck']].groupby(['team2']).count()
+
+		at_avg_luck = at_avg_luck.rename(columns={'away_team_luck': 'home_team_luck'})
+		at_cnt_luck = at_cnt_luck.rename(columns={'away_team_luck': 'home_team_luck'})
+		sum_luck = ht_avg_luck.add(at_avg_luck, fill_value=0)
+		sum_cnt = ht_cnt_luck.add(at_cnt_luck, fill_value=0)
+		avg_luck = sum_luck.div(sum_cnt, axis=0)
+		avg_luck = avg_luck.rename(columns={'home_team_luck': 'past_avg_luck'})
+
+
 		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
+		today_data = today_data.merge(avg_luck, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
+		today_data = today_data.merge(avg_luck, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
 		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
 		today_data = today_data.merge(similar_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
 		today_data = today_data.merge(similar_ht_rating_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar_ht'))
