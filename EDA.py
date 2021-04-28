@@ -13,6 +13,7 @@ from catboost import CatBoostRegressor, Pool
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 # DATE = datetime.now().strftime('%Y-%m-%d')
 # EXCLUDE_FEATURES = ['prob1','prob2',
@@ -170,9 +171,12 @@ df['corners_diff2'] = df['corners1_home'] - df['corners1_away']
 df['spi_diff'] = df['spi1'] - df['spi2']
 df['importance_diff'] = df['importance1'] - df['importance2']
 
-features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', #'corners1_home', 'corners2_home',
-			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', #'corners1_away', 'corners2_away',
-			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away']
+features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', #'shots1_home', 'shotsot1_home', 'xgshot2_home', 'shots2_home', 'shotsot2_home', 
+			#'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home', 'cards1_home', 'cards2_home', 'xpts1_home', 'convrate1_home', 'convrate2_home',
+			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', #'shots1_away', 'shotsot1_away', 'xgshot2_away', 'shots2_away', 'shotsot2_away',
+			#'corners1_away', 'corners2_away', 'fouls1_away', 'fouls2_away', 'cards1_away', 'cards2_away', 'xpts1_away', 'convrate1_away', 'convrate2_away',
+			#'spi1', 'spi2', 
+			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away']#, 'A', 'D', 'H']
 df = df[features]
 
 
@@ -190,34 +194,43 @@ X_train = pd.DataFrame(scaler.fit_transform(X_train.values), columns=X_train.col
 X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, index=X_val.index)
 
 
-for column in X_train:
-	p_corr, _ = pearsonr(X_train[column], y_train)
-	sp_corr, _ = spearmanr(X_train[column], y_train)
-	print(f'Pearson corr {column}: {p_corr}')
-	print(f'Spearman corr {column}: {sp_corr}')
+# for column in X_train:
+# 	p_corr, _ = pearsonr(X_train[column], y_train)
+# 	sp_corr, _ = spearmanr(X_train[column], y_train)
+# 	print(f'Pearson corr {column}: {p_corr}')
+# 	print(f'Spearman corr {column}: {sp_corr}')
 
-corr_matrx = X_train[features].corr()
-sns.heatmap(corr_matrx, annot=True, cmap="YlGnBu")
+# corr_matrx = X_train[features].corr()
+# sns.heatmap(corr_matrx, annot=True, cmap="YlGnBu")
+# plt.show()
+
+pca = PCA(n_components=2)
+X_train_pca = pca.fit_transform(X_train)
+X_val_pca = pca.transform(X_val)
+plt.bar(range(1,len(pca.explained_variance_ratio_)+1), pca.explained_variance_ratio_, alpha=0.5,
+        align='center', label='individual explained variance')
+
 plt.show()
+print(sum(pca.explained_variance_ratio_))
 
 
 xgb_model = xgb.XGBRegressor()
-xgb_model.fit(X_train, y_train)
+xgb_model.fit(X_train_pca, y_train)
 
-plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
-plt.show()
-xgb.plot_importance(xgb_model)
-plt.show()
+# plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
+# plt.show()
+# xgb.plot_importance(xgb_model)
+# plt.show()
 
 cb_model = CatBoostRegressor()
-cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
-plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
-plt.show()
+cb_model.fit(X_train_pca, y_train, eval_set=(X_val_pca, y_val))
+# plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
+# plt.show()
 
 
 
 print('xg_boost')
-y_pred = xgb_model.predict(X_val)
+y_pred = xgb_model.predict(X_val_pca)
 #y_pred = y_scaler.inverse_transform(y_pred)
 
 mae = tf.keras.metrics.MeanAbsoluteError()
@@ -230,7 +243,7 @@ print(f'MSE: {mse.result().numpy()}')
 
 
 print('catboost')
-y_pred = cb_model.predict(X_val)
+y_pred = cb_model.predict(X_val_pca)
 
 mae = tf.keras.metrics.MeanAbsoluteError()
 mae.update_state(y_pred, y_val)
