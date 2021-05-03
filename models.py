@@ -26,9 +26,9 @@ class FootballPoissonModel():
 
 	def predict_goals(self, data):
 		home_goals_pred = self.model.predict(data.assign(home=1).rename(
-						columns={'team1':'team', 'team2':'opponent'}))
+						columns={'team1': 'team', 'team2': 'opponent'}))
 		away_goals_pred = self.model.predict(data.assign(home=0).rename(
-						columns={'team2':'team', 'team1':'opponent'}))
+						columns={'team2': 'team', 'team1': 'opponent'}))
 
 		return home_goals_pred, away_goals_pred
 
@@ -39,13 +39,9 @@ class FootballPoissonModel():
 		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [htg, atg]]
 
 
-
-		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, len(team_pred))]
-		print(len(match_pred))
+		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, np.shape(team_pred)[2])]
 
 
-		home_win = np.sum(np.tril(match_pred[1][0], -1))
-		draw = np.sum(np.diag(match_pred[1][0]))
-		away_win = np.sum(np.triu(match_pred[1][0], 1))
+		res = [[np.sum(np.tril(match_pred[i][0], -1)), np.sum(np.diag(match_pred[i][0])), np.sum(np.triu(match_pred[i][0], 1))] for i in range(0, len(match_pred))] 
 
-		return home_win, draw, away_win
+		return np.array(res)
