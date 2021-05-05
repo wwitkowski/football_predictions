@@ -44,4 +44,4 @@ class FootballPoissonModel():
 
 		res = [[np.sum(np.tril(match_pred[i][0], -1)), np.sum(np.diag(match_pred[i][0])), np.sum(np.triu(match_pred[i][0], 1))] for i in range(0, len(match_pred))] 
 
-		return np.array(res)
+		return zip(*res)

@@ -11,9 +11,11 @@ from scipy.stats import pearsonr, spearmanr
 import xgboost as xgb
 from catboost import CatBoostRegressor, Pool
 import tensorflow as tf
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.linear_model import Lasso
+from sklearn.metrics import mean_squared_error
 
 # DATE = datetime.now().strftime('%Y-%m-%d')
 # EXCLUDE_FEATURES = ['prob1','prob2',
@@ -134,7 +136,8 @@ drop_features = ['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1
 ### Feature importance analysis ###
 
 df = pd.read_csv('training_data\\training_data_decay_001_num_40_luck.csv')
-#df = df[df['spi1'] > 80]
+# df = df[df['league'] == 'Barclays Premier League']
+# df = df[df['spi1'] > 80]
 df.importance1.fillna(value=df.importance1.mean(), inplace=True)
 df.importance2.fillna(value=df.importance2.mean(), inplace=True)
 df.dropna(inplace=True)
@@ -157,6 +160,11 @@ print(df.replace([np.inf, -np.inf], np.nan).isna().sum().sum())
 
 df.drop(['date', 'team1', 'team2', 'league', 'league_id'], axis=1, inplace=True)
 
+# goals_pos_luck = df[['xg1']].loc[df['importance1'] > 30]
+# goals_neg_luck = df[['xg1']].loc[df['importance1'] < 30]
+# means = (goals_pos_luck.mean().values, goals_neg_luck.mean().values)
+# print(goals_pos_luck.describe())
+# print(goals_neg_luck.describe())
 
 
 df['adj_avg_xg1_diff'] = df['adj_avg_xg1_home'] - df['adj_avg_xg2_home']
@@ -171,12 +179,22 @@ df['corners_diff2'] = df['corners1_home'] - df['corners1_away']
 df['spi_diff'] = df['spi1'] - df['spi2']
 df['importance_diff'] = df['importance1'] - df['importance2']
 
-features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', #'shots1_home', 'shotsot1_home', 'xgshot2_home', 'shots2_home', 'shotsot2_home', 
-			#'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home', 'cards1_home', 'cards2_home', 'xpts1_home', 'convrate1_home', 'convrate2_home',
-			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', #'shots1_away', 'shotsot1_away', 'xgshot2_away', 'shots2_away', 'shotsot2_away',
-			#'corners1_away', 'corners2_away', 'fouls1_away', 'fouls2_away', 'cards1_away', 'cards2_away', 'xpts1_away', 'convrate1_away', 'convrate2_away',
-			#'spi1', 'spi2', 
-			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away']#, 'A', 'D', 'H']
+features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', 'xgshot2_home', 'shots1_home', 'shotsot1_home',  'shots2_home', 'shotsot2_home', 
+			'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home', 'cards1_home', 'cards2_home',
+			'xpts1_home', 'convrate1_home', 'convrate2_home',
+			'avg_xg1_away', 'avg_xg2_away', 'xgshot1_away', 'xgshot2_away', 'shots1_away', 'shotsot1_away',  'shots2_away', 'shotsot2_away',
+			'corners1_away', 'corners2_away', 'fouls1_away', 'fouls2_away', 'cards1_away', 'cards2_away', 
+			'xpts1_away', 'convrate1_away', 'convrate2_away',
+			'spi1', 'spi2', 
+			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away', 'A', 'D', 'H',
+			'spi_diff', 'importance_diff']
+
+features = ['avg_xg1_home', 'xgshot1_home', 'xgshot2_home', 'shots1_home', 'shotsot1_home', 'shots2_home', 'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home',
+			'cards1_home', 'cards2_home', 'xpts1_home', 'convrate1_home', 'convrate2_home',
+			'avg_xg1_away', 'shots1_away', 'shotsot1_away', 'shots2_away', 'shotsot2_away', 'corners1_away',
+			'fouls1_away', 'cards1_away', 'cards2_away', 'xpts1_away', 'convrate1_away', 'convrate2_away', 'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 
+			'past_avg_luck', 'past_avg_luck_away', 'D', 'spi_diff']
+
 df = df[features]
 
 
@@ -194,6 +212,26 @@ X_train = pd.DataFrame(scaler.fit_transform(X_train.values), columns=X_train.col
 X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, index=X_val.index)
 
 
+alpha = np.linspace(0.001, 0.01, 101)
+print(alpha)
+search = GridSearchCV(estimator=Lasso(), param_grid={'alpha': alpha}, cv=5, scoring='neg_mean_absolute_error', verbose=3)
+search.fit(X_train, y_train)
+
+print(search.best_params_)
+print(pd.DataFrame(data={'Ferature': features, 'Coefs': search.best_estimator_.coef_}))
+print(len(search.best_estimator_.coef_))
+print(len(features))
+
+lasso_y_pred = search.best_estimator_.predict(X_val)
+mae = tf.keras.metrics.MeanAbsoluteError()
+mae.update_state(lasso_y_pred, y_val)
+print(f'MAE: {mae.result().numpy()}')
+
+mse = tf.keras.metrics.RootMeanSquaredError()
+mse.update_state(lasso_y_pred, y_val)
+print(f'MSE: {mse.result().numpy()}')
+
+
 # for column in X_train:
 # 	p_corr, _ = pearsonr(X_train[column], y_train)
 # 	sp_corr, _ = spearmanr(X_train[column], y_train)
@@ -204,18 +242,18 @@ X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, inde
 # sns.heatmap(corr_matrx, annot=True, cmap="YlGnBu")
 # plt.show()
 
-pca = PCA(n_components=2)
-X_train_pca = pca.fit_transform(X_train)
-X_val_pca = pca.transform(X_val)
-plt.bar(range(1,len(pca.explained_variance_ratio_)+1), pca.explained_variance_ratio_, alpha=0.5,
-        align='center', label='individual explained variance')
+# pca = PCA(n_components=2)
+# X_train_pca = pca.fit_transform(X_train)
+# X_val_pca = pca.transform(X_val)
+# plt.bar(range(1,len(pca.explained_variance_ratio_)+1), pca.explained_variance_ratio_, alpha=0.5,
+#         align='center', label='individual explained variance')
 
-plt.show()
-print(sum(pca.explained_variance_ratio_))
+# plt.show()
+# print(sum(pca.explained_variance_ratio_))
 
 
 xgb_model = xgb.XGBRegressor()
-xgb_model.fit(X_train_pca, y_train)
+xgb_model.fit(X_train, y_train)
 
 # plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
 # plt.show()
@@ -223,14 +261,14 @@ xgb_model.fit(X_train_pca, y_train)
 # plt.show()
 
 cb_model = CatBoostRegressor()
-cb_model.fit(X_train_pca, y_train, eval_set=(X_val_pca, y_val))
+cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
 # plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
 # plt.show()
 
 
 
 print('xg_boost')
-y_pred = xgb_model.predict(X_val_pca)
+y_pred = xgb_model.predict(X_val)
 #y_pred = y_scaler.inverse_transform(y_pred)
 
 mae = tf.keras.metrics.MeanAbsoluteError()
@@ -243,7 +281,7 @@ print(f'MSE: {mse.result().numpy()}')
 
 
 print('catboost')
-y_pred = cb_model.predict(X_val_pca)
+y_pred = cb_model.predict(X_val)
 
 mae = tf.keras.metrics.MeanAbsoluteError()
 mae.update_state(y_pred, y_val)
