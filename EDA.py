@@ -15,7 +15,9 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Lasso
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+
+from models import NeuralNetworkModel
 
 # DATE = datetime.now().strftime('%Y-%m-%d')
 # EXCLUDE_FEATURES = ['prob1','prob2',
@@ -66,8 +68,8 @@ from sklearn.metrics import mean_squared_error
 # sim_df_decay_005_num_40.to_csv('training_data_decay_001_num_80.csv', index=False)
 # sim_df_decay_010_num_40.to_csv('training_data_decay_003_num_80.csv', index=False)
 
-drop_features = ['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1',
-	'adj_score2', 'HomeTeam', 'AwayTeam', 'FTR', 'shots1', 'shots2', 'shotsot1',
+drop_features = ['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'adj_score1', 'adj_score2', 'FTR',
+	'HomeTeam', 'AwayTeam', 'shots1', 'shots2', 'shotsot1',
 	'shotsot2', 'fouls1', 'fouls2', 'corners1', 'corners2', 'yellow1', 'yellow2',
 	'red1', 'red2', 'MaxH', 'MaxD', 'MaxA', 'AvgH', 'AvgD', 'AvgA', 'avg_xg1',
 	'avg_xg2', 'adj_avg_xg1', 'adj_avg_xg2', 'pts1', 'pts2', 'xpts1', 'xpts2',
@@ -160,14 +162,8 @@ print(df.replace([np.inf, -np.inf], np.nan).isna().sum().sum())
 
 df.drop(['date', 'team1', 'team2', 'league', 'league_id'], axis=1, inplace=True)
 
-# goals_pos_luck = df[['xg1']].loc[df['importance1'] > 30]
-# goals_neg_luck = df[['xg1']].loc[df['importance1'] < 30]
-# means = (goals_pos_luck.mean().values, goals_neg_luck.mean().values)
-# print(goals_pos_luck.describe())
-# print(goals_neg_luck.describe())
-
-
-df['adj_avg_xg1_diff'] = df['adj_avg_xg1_home'] - df['adj_avg_xg2_home']
+df['adj_avg_xg_diff_home'] = df['adj_avg_xg1_home'] - df['adj_avg_xg2_home']
+df['adj_avg_xg_diff_away'] = df['adj_avg_xg1_away'] - df['adj_avg_xg2_away']
 df['xgshot_diff'] = df['xgshot1_home'] - df['xgshot2_home']
 df['corners_diff'] = df['corners1_home'] - df['corners2_home']
 
@@ -175,9 +171,25 @@ df['adj_avg_xg1_diff2'] = df['adj_avg_xg1_home'] - df['adj_avg_xg1_away']
 df['xgshot_diff2'] = df['xgshot1_home'] - df['xgshot1_away']
 df['corners_diff2'] = df['corners1_home'] - df['corners1_away']
 
-
 df['spi_diff'] = df['spi1'] - df['spi2']
 df['importance_diff'] = df['importance1'] - df['importance2']
+
+# print(df[['importance_diff']].describe())
+
+
+# goals_pos_luck = df[['xg1']].loc[df['importance_diff'] > 30]
+# goals_neg_luck = df[['xg1']].loc[df['importance_diff'] <= 30]
+# means = (goals_pos_luck.mean().values, goals_neg_luck.mean().values)
+# print(goals_pos_luck.describe())
+# print(goals_neg_luck.describe())
+
+# df2 = df[['xg1', 'xg2', 'shotsot1_home', 'shotsot2_away', 'FTR']]
+# sns.pairplot(df2, hue='FTR')
+# plt.show()
+# 
+
+
+
 
 features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', 'xgshot2_home', 'shots1_home', 'shotsot1_home',  'shots2_home', 'shotsot2_home', 
 			'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home', 'cards1_home', 'cards2_home',
@@ -189,22 +201,25 @@ features = ['avg_xg1_home', 'avg_xg2_home', 'xgshot1_home', 'xgshot2_home', 'sho
 			'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 'past_avg_luck', 'past_avg_luck_away', 'A', 'D', 'H',
 			'spi_diff', 'importance_diff']
 
-features = ['avg_xg1_home', 'xgshot1_home', 'xgshot2_home', 'shots1_home', 'shotsot1_home', 'shots2_home', 'corners1_home', 'corners2_home', 'fouls1_home', 'fouls2_home',
-			'cards1_home', 'cards2_home', 'xpts1_home', 'convrate1_home', 'convrate2_home',
-			'avg_xg1_away', 'shots1_away', 'shotsot1_away', 'shots2_away', 'shotsot2_away', 'corners1_away',
-			'fouls1_away', 'cards1_away', 'cards2_away', 'xpts1_away', 'convrate1_away', 'convrate2_away', 'importance1', 'importance2', 'xg1_similar', 'xg2_similar', 
-			'past_avg_luck', 'past_avg_luck_away', 'D', 'spi_diff']
+score1_features = ['avg_xg1_home', 'xgshot1_home', 
+			'shots1_home', 'shotsot1_home', 'shotsot2_home', 'shots2_home', 'corners1_home', 
+			'corners2_home', 'fouls1_home', 
+			'xpts1_home', 'convrate1_home',
+			'avg_xg1_away',
+			'shots1_away', 'shotsot1_away', 'shots2_away', 'shotsot2_away', 'corners1_away',
+			'corners2_away',
+			'xpts1_away', 
+			'convrate1_away',
+			'importance1', 'importance2',
+			'xg1_similar', 'xg2_similar',
+			'D', 'spi_diff']
 
-df = df[features]
+df = df[score1_features]
 
 
 
-X_train, X_val, y_train, y_val = train_test_split(df, target.score1, test_size=0.2, random_state=0)
-print(y_train)
-# X_train = np.array(X_train)
-# X_val = np.array(X_val)
-# y_train = np.array(y_train)
-# y_val = np.array(y_val)
+X_train, X_val, y_train, y_val = train_test_split(df, target, test_size=0.2, random_state=0)
+
 
 # Scale data
 scaler = StandardScaler()
@@ -212,24 +227,7 @@ X_train = pd.DataFrame(scaler.fit_transform(X_train.values), columns=X_train.col
 X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, index=X_val.index)
 
 
-alpha = np.linspace(0.001, 0.01, 101)
-print(alpha)
-search = GridSearchCV(estimator=Lasso(), param_grid={'alpha': alpha}, cv=5, scoring='neg_mean_absolute_error', verbose=3)
-search.fit(X_train, y_train)
 
-print(search.best_params_)
-print(pd.DataFrame(data={'Ferature': features, 'Coefs': search.best_estimator_.coef_}))
-print(len(search.best_estimator_.coef_))
-print(len(features))
-
-lasso_y_pred = search.best_estimator_.predict(X_val)
-mae = tf.keras.metrics.MeanAbsoluteError()
-mae.update_state(lasso_y_pred, y_val)
-print(f'MAE: {mae.result().numpy()}')
-
-mse = tf.keras.metrics.RootMeanSquaredError()
-mse.update_state(lasso_y_pred, y_val)
-print(f'MSE: {mse.result().numpy()}')
 
 
 # for column in X_train:
@@ -252,41 +250,92 @@ print(f'MSE: {mse.result().numpy()}')
 # print(sum(pca.explained_variance_ratio_))
 
 
-xgb_model = xgb.XGBRegressor()
-xgb_model.fit(X_train, y_train)
 
-# plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
-# plt.show()
-# xgb.plot_importance(xgb_model)
-# plt.show()
+# alpha = np.linspace(0.001, 0.01, 101)
+# print(alpha)
+# search = GridSearchCV(estimator=Lasso(), param_grid={'alpha': alpha}, cv=5, scoring='neg_mean_absolute_error', verbose=3)
+# search.fit(X_train, y_train)
 
-cb_model = CatBoostRegressor()
-cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
-# plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
-# plt.show()
+lasso = Lasso(alpha=0.001)
+lasso.fit(X_train, y_train)
 
+lasso_y_pred = lasso.predict(X_val)
+print(f"MAE: {mean_absolute_error(y_val, lasso_y_pred, multioutput='raw_values')}")
+print(f"MSE: {mean_squared_error(y_val, lasso_y_pred, multioutput='raw_values')}")
 
 
 print('xg_boost')
-y_pred = xgb_model.predict(X_val)
-#y_pred = y_scaler.inverse_transform(y_pred)
+xgb_model_score1 = xgb.XGBRegressor()
+xgb_model_score1.fit(X_train, y_train.score1)
+xgb_model_score2 = xgb.XGBRegressor()
+xgb_model_score2.fit(X_train, y_train.score2)
 
-mae = tf.keras.metrics.MeanAbsoluteError()
-mae.update_state(y_pred, y_val)
-print(f'MAE: {mae.result().numpy()}')
+xgb_score1_pred = xgb_model_score1.predict(X_val)
+xgb_score2_pred = xgb_model_score2.predict(X_val)
 
-mse = tf.keras.metrics.RootMeanSquaredError()
-mse.update_state(y_pred, y_val)
-print(f'MSE: {mse.result().numpy()}')
+print(f"MAE score1: {mean_absolute_error(y_val.score1, xgb_score1_pred)}")
+print(f"MAE score2: {mean_absolute_error(y_val.score2, xgb_score2_pred)}")
+
+print('cat_boost')
+cb_model_score1 = CatBoostRegressor()
+cb_model_score1.fit(X_train, y_train.score1, eval_set=(X_val, y_val.score1), early_stopping_rounds=10)
+cb_model_score2 = CatBoostRegressor()
+cb_model_score2.fit(X_train, y_train.score2, eval_set=(X_val, y_val.score2), early_stopping_rounds=10)
+
+cb_score1_pred = cb_model_score1.predict(X_val)
+cb_score2_pred = cb_model_score2.predict(X_val)
+
+print(f"MAE score1: {mean_absolute_error(y_val.score1, cb_score1_pred)}")
+print(f"MAE score2: {mean_absolute_error(y_val.score2, cb_score2_pred)}")
 
 
-print('catboost')
-y_pred = cb_model.predict(X_val)
+print('neural network')
+print(X_train.shape[0])
+activations = ('tanh', 'tanh')
+nodes = (16, 32)
 
-mae = tf.keras.metrics.MeanAbsoluteError()
-mae.update_state(y_pred, y_val)
-print(f'MAE: {mae.result().numpy()}')
+nn_model = NeuralNetworkModel()
+nn_model.build(n_features=X_train.shape[1],
+				activations=activations,
+				nodes=nodes)
+nn_model.train(X_train.values, y_train.values, X_val.values, y_val.values, verbose=1, batch_size=256, epochs=100)
 
-mse = tf.keras.metrics.RootMeanSquaredError()
-mse.update_state(y_pred, y_val)
-print(f'MSE: {mse.result().numpy()}')
+nn_y_pred = nn_model.predict(X_val.values)
+print(f"MAE: {mean_absolute_error(y_val, nn_y_pred, multioutput='raw_values')}")
+print(f"MSE: {mean_squared_error(y_val, nn_y_pred, multioutput='raw_values')}")
+
+# cb_model = CatBoostRegressor()
+# cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
+
+# # plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
+# # plt.show()
+# # xgb.plot_importance(xgb_model)
+# # plt.show()
+
+# # plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
+# # plt.show()
+
+
+
+
+# #y_pred = y_scaler.inverse_transform(y_pred)
+
+# xgb_mae = tf.keras.metrics.MeanAbsoluteError()
+# xgb_mae.update_state(xgb_y_pred, y_val)
+# print(f'MAE: {xgb_mae.result().numpy()}')
+
+# xgb_mse = tf.keras.metrics.RootMeanSquaredError()
+# xgb_mse.update_state(xgb_y_pred, y_val)
+# print(f'MSE: {xgb_mse.result().numpy()}')
+
+
+# print('catboost')
+# cb_y_pred = cb_model.predict(X_val)
+
+# cb_mae = tf.keras.metrics.MeanAbsoluteError()
+# cb_mae.update_state(cb_y_pred, y_val)
+# print(f'MAE: {cb_mae.result().numpy()}')
+
+# cb_mse = tf.keras.metrics.RootMeanSquaredError()
+# cb_mse.update_state(cb_y_pred, y_val)
+# print(f'MSE: {cb_mse.result().numpy()}')
