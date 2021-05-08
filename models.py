@@ -34,10 +34,10 @@ class FootballPoissonModel():
 		return home_goals_pred, away_goals_pred
 
 
-	def predict_chances(self, data, max_goals=10):
+	@staticmethod
+	def predict_chances(home_goals, away_goals, max_goals=10):
 
-		htg, atg = self.predict_goals(data)
-		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [htg, atg]]
+		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [home_goals, away_goals]]
 
 
 		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, np.shape(team_pred)[2])]
