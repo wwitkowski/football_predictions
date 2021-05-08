@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.model_selection import KFold
 
 from models import NeuralNetworkModel
 
@@ -256,86 +257,81 @@ X_val = pd.DataFrame(scaler.transform(X_val.values), columns=X_val.columns, inde
 # search = GridSearchCV(estimator=Lasso(), param_grid={'alpha': alpha}, cv=5, scoring='neg_mean_absolute_error', verbose=3)
 # search.fit(X_train, y_train)
 
-lasso = Lasso(alpha=0.001)
-lasso.fit(X_train, y_train)
+# lasso = Lasso(alpha=0.001)
+# lasso.fit(X_train, y_train)
 
-lasso_y_pred = lasso.predict(X_val)
-print(f"MAE: {mean_absolute_error(y_val, lasso_y_pred, multioutput='raw_values')}")
-print(f"MSE: {mean_squared_error(y_val, lasso_y_pred, multioutput='raw_values')}")
+# lasso_y_pred = lasso.predict(X_val)
+# print(f"MAE: {mean_absolute_error(y_val, lasso_y_pred, multioutput='raw_values')}")
+# print(f"MSE: {mean_squared_error(y_val, lasso_y_pred, multioutput='raw_values')}")
 
 
-print('xg_boost')
-xgb_model_score1 = xgb.XGBRegressor()
-xgb_model_score1.fit(X_train, y_train.score1)
-xgb_model_score2 = xgb.XGBRegressor()
-xgb_model_score2.fit(X_train, y_train.score2)
+# print('xg_boost')
+# xgb_model_score1 = xgb.XGBRegressor()
+# xgb_model_score1.fit(X_train, y_train.score1)
+# xgb_model_score2 = xgb.XGBRegressor()
+# xgb_model_score2.fit(X_train, y_train.score2)
 
-xgb_score1_pred = xgb_model_score1.predict(X_val)
-xgb_score2_pred = xgb_model_score2.predict(X_val)
+# xgb_score1_pred = xgb_model_score1.predict(X_val)
+# xgb_score2_pred = xgb_model_score2.predict(X_val)
 
-print(f"MAE score1: {mean_absolute_error(y_val.score1, xgb_score1_pred)}")
-print(f"MAE score2: {mean_absolute_error(y_val.score2, xgb_score2_pred)}")
+# print(f"MAE score1: {mean_absolute_error(y_val.score1, xgb_score1_pred)}")
+# print(f"MAE score2: {mean_absolute_error(y_val.score2, xgb_score2_pred)}")
 
-print('cat_boost')
-cb_model_score1 = CatBoostRegressor()
-cb_model_score1.fit(X_train, y_train.score1, eval_set=(X_val, y_val.score1), early_stopping_rounds=10)
-cb_model_score2 = CatBoostRegressor()
-cb_model_score2.fit(X_train, y_train.score2, eval_set=(X_val, y_val.score2), early_stopping_rounds=10)
+# print('cat_boost')
+# cb_model_score1 = CatBoostRegressor()
+# cb_model_score1.fit(X_train, y_train.score1, eval_set=(X_val, y_val.score1), early_stopping_rounds=10)
+# cb_model_score2 = CatBoostRegressor()
+# cb_model_score2.fit(X_train, y_train.score2, eval_set=(X_val, y_val.score2), early_stopping_rounds=10)
 
-cb_score1_pred = cb_model_score1.predict(X_val)
-cb_score2_pred = cb_model_score2.predict(X_val)
+# cb_score1_pred = cb_model_score1.predict(X_val)
+# cb_score2_pred = cb_model_score2.predict(X_val)
 
-print(f"MAE score1: {mean_absolute_error(y_val.score1, cb_score1_pred)}")
-print(f"MAE score2: {mean_absolute_error(y_val.score2, cb_score2_pred)}")
-
+# print(f"MAE score1: {mean_absolute_error(y_val.score1, cb_score1_pred)}")
+# print(f"MAE score2: {mean_absolute_error(y_val.score2, cb_score2_pred)}")
 
 print('neural network')
-print(X_train.shape[0])
-activations = ('tanh', 'tanh')
-nodes = (16, 32)
+# activations = ('relu', 'relu')
+# nodes = (4, 8)
+# nn_model = NeuralNetworkModel()
+# nn_model.build(n_features=X_train.shape[1],
+# 				activations=activations,
+# 				nodes=nodes)
 
-nn_model = NeuralNetworkModel()
-nn_model.build(n_features=X_train.shape[1],
-				activations=activations,
-				nodes=nodes)
-nn_model.train(X_train.values, y_train.values, X_val.values, y_val.values, verbose=1, batch_size=256, epochs=100)
+# history = nn_model.train(X_train.values, y_train.values, X_val.values, y_val.values, 
+# 						verbose=1, batch_size=512, epochs=1000)
 
-nn_y_pred = nn_model.predict(X_val.values)
+
+best_model = NeuralNetworkModel('nn_model')
+nn_y_pred = best_model.predict(X_val.values)
 print(f"MAE: {mean_absolute_error(y_val, nn_y_pred, multioutput='raw_values')}")
 print(f"MSE: {mean_squared_error(y_val, nn_y_pred, multioutput='raw_values')}")
 
-# cb_model = CatBoostRegressor()
-# cb_model.fit(X_train, y_train, eval_set=(X_val, y_val))
 
-# # plt.bar(range(len(xgb_model.feature_importances_)), xgb_model.feature_importances_, tick_label=df.columns)
-# # plt.show()
-# # xgb.plot_importance(xgb_model)
-# # plt.show()
+# print('Neural network KFOOLD CV')
 
-# # plt.bar(range(len(cb_model.feature_importances_)), cb_model.feature_importances_, tick_label=df.columns)
-# # plt.show()
+# batches = [64, 128, 256, 512]
 
+# kf = KFold(n_splits=8)
+# for batches_setting in batches:
+# 	print(f'Batches setting: {batches_setting}')
+# 	df_copy = df.copy()
+# 	target_copy = target.copy()
+# 	scores = []
+# 	for train, test in kf.split(df_copy):
+# 		scaler = StandardScaler()
+# 		X_train = scaler.fit_transform(df_copy.iloc[train])
+# 		X_val = scaler.transform(df_copy.iloc[test])
 
+# 		y_train = target_copy.iloc[train].values
+# 		y_val = target_copy.iloc[test].values
 
+# 		nn_model = NeuralNetworkModel()
+# 		nn_model.build(n_features=X_train.shape[1],
+# 							activations=activations,
+# 							nodes=nodes)
 
-# #y_pred = y_scaler.inverse_transform(y_pred)
+# 		history = nn_model.train(X_train, y_train, X_val, y_val, 
+# 						   			 verbose=0, batch_size=batches_setting, epochs=300)
+# 		scores.append(np.min(history.history['val_mae']))
+# 	print(f'Average min loss: {np.mean(scores)}, Std dev: {np.std(scores)}')
 
-# xgb_mae = tf.keras.metrics.MeanAbsoluteError()
-# xgb_mae.update_state(xgb_y_pred, y_val)
-# print(f'MAE: {xgb_mae.result().numpy()}')
-
-# xgb_mse = tf.keras.metrics.RootMeanSquaredError()
-# xgb_mse.update_state(xgb_y_pred, y_val)
-# print(f'MSE: {xgb_mse.result().numpy()}')
-
-
-# print('catboost')
-# cb_y_pred = cb_model.predict(X_val)
-
-# cb_mae = tf.keras.metrics.MeanAbsoluteError()
-# cb_mae.update_state(cb_y_pred, y_val)
-# print(f'MAE: {cb_mae.result().numpy()}')
-
-# cb_mse = tf.keras.metrics.RootMeanSquaredError()
-# cb_mse.update_state(cb_y_pred, y_val)
-# print(f'MSE: {cb_mse.result().numpy()}')

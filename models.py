@@ -59,7 +59,7 @@ class NeuralNetworkModel():
 
 
 	def build(self, n_features, activations, nodes, bias=None):
-		optimizer = 'sgd'
+		optimizer = 'adam'
 		loss = tf.keras.losses.MeanSquaredError()
 		metrics = ['mae']
 
@@ -74,7 +74,7 @@ class NeuralNetworkModel():
 		# Hidden layers
 		for i in range(1, len(activations)):
 			self.model.add(tf.keras.layers.Dense(nodes[i], activation=activations[i]))
-			#self.model.add(tf.keras.layers.Dropout(0.05))
+			#self.model.add(tf.keras.layers.Dropout(0.1))
 
 		# Output layer
 		self.model.add(tf.keras.layers.Dense(2, bias_initializer=bias))
@@ -87,17 +87,17 @@ class NeuralNetworkModel():
 
 	def train(self, X_train, y_train, X_val, y_val, verbose=1, batch_size=256, epochs=200):
 
-		# checkpoint = tf.keras.callbacks.ModelCheckpoint(f"models\\nn_model_{date.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.hdf5",
-		# 												 monitor='val_loss',
-		# 												 save_best_only=True)
+		checkpoint = tf.keras.callbacks.ModelCheckpoint(f"models\\nn_model.hdf5",
+														 monitor='val_loss',
+														 save_best_only=True)
 
-		early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50, verbose=0)
+		early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100, verbose=0)
 
 		self.history = self.model.fit(X_train, y_train,
 									  batch_size=batch_size,
 									  verbose=verbose,
 									  epochs=epochs,
-									  #callbacks=[checkpoint],
+									  callbacks=[checkpoint, early_stopping],
 									  validation_data=(X_val, y_val))
 
 		return self.history
