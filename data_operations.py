@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timedelta
 from sources import Source1, Source2
+from models import FootballPoissonModel
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -133,63 +134,63 @@ class Dataset(DatasetLoader):
 		return self.data.date.iloc[last_update_idx]
 
 
-class PoissonInflatedModel:
-	"""
-	Poisson Inflated Model for calculating Match outcome probabilities and expected points.
-	Model Inflates the draw outcome 
-	------------------------
-	parameters:
-	p - determines the inflation strenght
-	teta - determines how much the model is inflated towards 0-0 match outcome
-	shape - matrix shape. (10, 10) means that probabilities will be calculated for up to 10-10 score
-	"""
+# class PoissonInflatedModel:
+# 	"""
+# 	Poisson Inflated Model for calculating Match outcome probabilities and expected points.
+# 	Model Inflates the draw outcome 
+# 	------------------------
+# 	parameters:
+# 	p - determines the inflation strenght
+# 	teta - determines how much the model is inflated towards 0-0 match outcome
+# 	shape - matrix shape. (10, 10) means that probabilities will be calculated for up to 10-10 score
+# 	"""
 
-	def __init__(self, p=0.1, teta=0.15, shape=(10, 10)):
-		self.p = p
-		self.teta = teta
-		self.shape = shape
-
-
-	@staticmethod
-	def geometric_function(p, k):
-		return ((1-p) ** (k-1)) * p
+# 	def __init__(self, p=0.1, teta=0.15, shape=(10, 10)):
+# 		self.p = p
+# 		self.teta = teta
+# 		self.shape = shape
 
 
-	@staticmethod
-	def poisson(mu, k):
-		f = ((mu ** k)*(math.exp(1)**(-mu))) / math.factorial(k)
-		return f
+# 	@staticmethod
+# 	def geometric_function(p, k):
+# 		return ((1-p) ** (k-1)) * p
 
 
-	def poisson_matrix(self, xg1, xg2):
-		poisson_matrix = np.zeros(self.shape)
-		for i in range(0, self.shape[0]):
-			for j in range(0, self.shape[1]):
-				if i == j:
-					poisson_matrix[j, i] = (1 - self.p) * self.poisson(xg1, i) * self.poisson(xg2, j) + self.p * self.geometric_function(self.teta, i)
-				else:
-					poisson_matrix[j, i] = (1 - self.p) * self.poisson(xg1, i) * self.poisson(xg2, j)
-
-		return poisson_matrix
+# 	@staticmethod
+# 	def poisson(mu, k):
+# 		f = ((mu ** k)*(math.exp(1)**(-mu))) / math.factorial(k)
+# 		return f
 
 
-	def win_probabilities(self, xg1, xg2):
+# 	def poisson_matrix(self, xg1, xg2):
+# 		poisson_matrix = np.zeros(self.shape)
+# 		for i in range(0, self.shape[0]):
+# 			for j in range(0, self.shape[1]):
+# 				if i == j:
+# 					poisson_matrix[j, i] = (1 - self.p) * self.poisson(xg1, i) * self.poisson(xg2, j) + self.p * self.geometric_function(self.teta, i)
+# 				else:
+# 					poisson_matrix[j, i] = (1 - self.p) * self.poisson(xg1, i) * self.poisson(xg2, j)
 
-		poisson_matrix = self.poisson_matrix(xg1, xg2)
-		homewin_prob = sum(sum(np.triu(poisson_matrix, k=1)))
-		awaywin_prob = sum(sum(np.tril(poisson_matrix, k=-1)))
-		draw_prob = sum(np.diag(poisson_matrix))
-
-		return homewin_prob, draw_prob, awaywin_prob
+# 		return poisson_matrix
 
 
-	def expected_points(self, xg1, xg2):
+# 	def win_probabilities(self, xg1, xg2):
 
-		homewin_prob, draw_prob, awaywin_prob = self.win_probabilities(xg1, xg2)
-		xpts1 = 3*homewin_prob + draw_prob
-		xpts2 = 3*awaywin_prob + draw_prob
+# 		poisson_matrix = self.poisson_matrix(xg1, xg2)
+# 		homewin_prob = sum(sum(np.triu(poisson_matrix, k=1)))
+# 		awaywin_prob = sum(sum(np.tril(poisson_matrix, k=-1)))
+# 		draw_prob = sum(np.diag(poisson_matrix))
 
-		return xpts1, xpts2
+# 		return homewin_prob, draw_prob, awaywin_prob
+
+
+# 	def expected_points(self, xg1, xg2):
+
+# 		homewin_prob, draw_prob, awaywin_prob = self.win_probabilities(xg1, xg2)
+# 		xpts1 = 3*homewin_prob + draw_prob
+# 		xpts2 = 3*awaywin_prob + draw_prob
+
+# 		return xpts1, xpts2
 
 
 class FootballStats:
@@ -258,8 +259,12 @@ class FootballStats:
 		self.data['pts1'], self.data['pts2'] = zip(*self.data.apply(lambda row: self.points(row.FTR), axis=1))
 
 		# Add expected points based on expected goals
-		p = PoissonInflatedModel(p=0.08, teta=0.14)
-		self.data['xpts1'], self.data['xpts2'] = zip(*self.data.apply(lambda row: p.expected_points(row.xg1, row.xg2), axis=1))
+		p = FootballPoissonModel()
+		self.data[['xg1', 'xg2']] = self.data[['xg1', 'xg2']].fillna(value=0)
+		h, d, a = p.predict_chances(self.data.xg1.values, self.data.xg2.values)
+		self.data['xwin1'], self.data['xdraw'], self.data['xwin2'] = h, d, a
+		self.data['xpts1'] = 3 * self.data['xwin1'] + self.data['xdraw']
+		self.data['xpts2'] = 3 * self.data['xwin2'] + self.data['xdraw']
 
 		self.data['xgshot1'] = self.data['xg1'] / self.data['shots1']
 		self.data.xgshot1.replace([np.inf, -np.inf], 0, inplace=True)
@@ -290,16 +295,17 @@ class FootballStats:
 
 class TeamStats:
 
-	def __init__(self, decay_factor, num_of_matches):
+	def __init__(self, decay_factor, num_of_matches, min_matches):
 		self.decay_factor = decay_factor
 		self.num_of_matches = num_of_matches
+		self.min_matches = min_matches
 
 
 	@staticmethod
 	def stats_from_similar(present_df, past_df, by, n):
 		search_array = np.array(past_df[by])
 		input_array = np.array(present_df[by])
-		neigh = NearestNeighbors(n_neighbors=100)
+		neigh = NearestNeighbors(n_neighbors=n)
 		neigh.fit(search_array)
 		
 		_, indices = neigh.kneighbors(input_array)
@@ -321,7 +327,7 @@ class TeamStats:
 		# Collect data for all teams
 		for team in teams_dict.keys():
 			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(past_matches_num).copy()
-			if team_data.shape[0] != past_matches_num:
+			if team_data.shape[0] < self.min_matches:
 				continue
 			concat_data = pd.concat([concat_data, team_data], ignore_index=True)
 
@@ -340,8 +346,6 @@ class TeamStats:
 		today_data = df[df.date == date]
 
 		similar_idxs = self.stats_from_similar(today_data, past_data, by=['spi1', 'spi2'], n=100)
-		similar_idxs_ht_rating = self.stats_from_similar(today_data, past_data, by=['spi1'], n=200)
-		similar_idxs_at_rating = self.stats_from_similar(today_data, past_data, by=['spi2'], n=200)
 
 		similar_df = pd.DataFrame()
 		for num, idx in enumerate(similar_idxs):
@@ -351,20 +355,6 @@ class TeamStats:
 			final = pd.concat([target, result])
 			final = pd.concat([final, wins_perc])
 			similar_df = similar_df.append(final, ignore_index=True)
-
-		similar_ht_rating_df = pd.DataFrame()
-		for num, idx in enumerate(similar_idxs_ht_rating):
-			target = today_data[['team1', 'team2']].iloc[num]
-			result = past_data[['score1', 'score2', 'xg1', 'xg2']].iloc[idx].mean()
-			final = pd.concat([target, result])
-			similar_ht_rating_df = similar_ht_rating_df.append(final, ignore_index=True)
-
-		similar_at_rating_df = pd.DataFrame()
-		for num, idx in enumerate(similar_idxs_at_rating):
-			target = today_data[['team1', 'team2']].iloc[num]
-			result = past_data[['score1', 'score2', 'xg1', 'xg2']].iloc[idx].mean()
-			final = pd.concat([target, result])
-			similar_at_rating_df = similar_at_rating_df.append(final, ignore_index=True)
 
  
 		# Calculate average stats for home teams
@@ -383,27 +373,19 @@ class TeamStats:
 
 		date = datetime.strptime(date, '%Y-%m-%d')
 		teams_past_data['weight'] = teams_past_data.apply(lambda row: self.weights(row.date, date), axis=1)
-		weights = teams_past_data[['team1', 'team2']].copy()
-		weights['weight'] = teams_past_data.pop('weight')
-		weighted_stats = teams_past_data.select_dtypes(include=['float64'])
-		weighted_stats = weighted_stats.multiply(weights.weight, axis='index')
 		teams_past_data.drop(exclude_features, axis=1, inplace=True)
-
+		
 		# Caluclate averages
-		sum_values_home = teams_past_data.groupby(['team1']).sum()
-		sum_weights_home = weights.groupby(['team1']).sum()
-
-		sum_values_away = teams_past_data.groupby(['team2']).sum()
-		sum_weights_away = weights.groupby(['team2']).sum()
-
-		home_stats_names = [col for col in sum_values_away.columns.values if '1' in col]
-		away_stats_names = [col for col in sum_values_away.columns.values if '2' in col]
+		home_stats_names = [col for col in teams_past_data.columns.values if '1' in col]
+		away_stats_names = [col for col in teams_past_data.columns.values if '2' in col]
 		rename_away_stats_dict = dict(zip(home_stats_names + away_stats_names, away_stats_names + home_stats_names))
 
-		sum_values_away = sum_values_away.rename(columns=rename_away_stats_dict)
-		sum_values = sum_values_home.add(sum_values_away, fill_value=0)
-		sum_weights = sum_weights_home.add(sum_weights_away, fill_value=0)
-		avg_values = sum_values.div(sum_weights.weight, axis=0)
+		avg_weight_stats = pd.concat([teams_past_data, teams_past_data.rename(
+						 			 columns=rename_away_stats_dict)], ignore_index=True, sort=False)
+
+		weighted_stats = teams_past_data.select_dtypes(include=['float64']).columns.values
+
+		avg_weight_stats = avg_weight_stats.groupby(['team1']).apply(lambda x: pd.Series(np.average(x[weighted_stats], weights=x.weight, axis=0), weighted_stats))
 
 
 		teams_past_luck = pd.concat([home_teams_past_luck, away_teams_past_luck], ignore_index=True)
@@ -411,26 +393,119 @@ class TeamStats:
 
 		teams_past_luck['home_team_luck'] = teams_past_luck['score1'] - teams_past_luck['xg1']
 		teams_past_luck['away_team_luck'] = teams_past_luck['score2'] - teams_past_luck['xg2']
-		ht_avg_luck = teams_past_luck[['team1', 'home_team_luck']].groupby(['team1']).sum()
-		ht_cnt_luck = teams_past_luck[['team1', 'home_team_luck']].groupby(['team1']).count()
-		at_avg_luck = teams_past_luck[['team2', 'away_team_luck']].groupby(['team2']).sum()
-		at_cnt_luck = teams_past_luck[['team2', 'away_team_luck']].groupby(['team2']).count()
 
-		at_avg_luck = at_avg_luck.rename(columns={'away_team_luck': 'home_team_luck'})
-		at_cnt_luck = at_cnt_luck.rename(columns={'away_team_luck': 'home_team_luck'})
-		sum_luck = ht_avg_luck.add(at_avg_luck, fill_value=0)
-		sum_cnt = ht_cnt_luck.add(at_cnt_luck, fill_value=0)
-		avg_luck = sum_luck.div(sum_cnt, axis=0)
-		avg_luck = avg_luck.rename(columns={'home_team_luck': 'past_avg_luck'})
+		avg_luck = pd.concat([teams_past_luck[['team1', 'home_team_luck']].rename(
+						 	 												columns={'home_team_luck': 'team_luck'}), 
+							  teams_past_luck[['team2', 'away_team_luck']].rename(
+						 	 												columns={'team2': 'team1',
+						 	 														 'away_team_luck': 'team_luck'})], 
+							  												ignore_index=True)
 
+		avg_luck = avg_luck.groupby(['team1']).mean()
 
-		today_data = today_data.merge(avg_values, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
-		today_data = today_data.merge(avg_values, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
-		today_data = today_data.merge(avg_luck, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
-		today_data = today_data.merge(avg_luck, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
+		today_data = today_data.merge(avg_weight_stats, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
+		today_data = today_data.merge(avg_weight_stats, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))
+		today_data = today_data.merge(avg_luck, left_on='team1', right_index=True, how='inner')
+		today_data = today_data.merge(avg_luck, left_on='team2', right_index=True, how='inner', suffixes=('_home', '_away'))
 		today_data = today_data.merge(league_avgs, on='league_id', right_index=True, how='inner', suffixes=('', '_league'))
 		today_data = today_data.merge(similar_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar'))
-		today_data = today_data.merge(similar_ht_rating_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar_ht'))
-		today_data = today_data.merge(similar_at_rating_df, on=['team1', 'team2'], right_index=True, how='inner', suffixes=('', '_similar_at'))
 
 		return today_data
+
+
+class Bookmaker():
+
+	def __init__(self, data, stake, odds='max', kelly=False):
+		self.data = data
+		self.stake = stake
+		self.odds = odds
+		self.kelly = kelly
+
+	def _bet(self, row):
+		if self.odds == 'max':
+			if row.MaxH > 1/row.homewin_pred:
+				if row.MaxD > 1/row.draw_pred:
+					return 'HD'
+				elif row.MaxA > 1/row.awaywin_pred:
+					return 'HA'
+				else:
+					return 'H'
+			elif row.MaxA > 1/row.homewin_pred:
+				if row.MaxD > 1/row.draw_pred:
+					return 'AD'
+				else:
+					return 'A'
+			elif row.MaxD > 1/row.draw_pred:
+				return 'D'
+			else:
+				return 'X'
+		if self.odds == 'avg':
+			if row.AvgH > 1/row.homewin_pred:
+				if row.AvgD > 1/row.draw_pred:
+					return 'HD'
+				elif row.AvgA > 1/row.awaywin_pred:
+					return 'HA'
+				else:
+					return 'H'
+			elif row.AvgA > 1/row.homewin_pred:
+				if row.AvgD > 1/row.draw_pred:
+					return 'AD'
+				else:
+					return 'A'
+			elif row.AvgD > 1/row.draw_pred:
+				return 'D'
+			else:
+				return 'X'
+
+
+	def _prediction_odds(self, row):
+		if self.odds == 'max':
+			if row.BET == 'H':
+				return row.MaxH
+			elif row.BET == 'HD':
+				return 1/(1/row.MaxH + 1/row.MaxD)
+			elif row.BET == 'HA':
+				return 1/(1/row.MaxH + 1/row.MaxA)
+			elif row.BET == 'D':
+				return row.MaxD
+			elif row.BET == 'AD':
+				return 1/(1/row.MaxD + 1/row.MaxA)
+			elif row.BET == 'A':
+				return row.MaxA
+			else:
+				return 0
+		if self.odds == 'avg':
+			if row.BET == 'H':
+				return row.AvgH
+			elif row.BET == 'HD':
+				return 1/(1/row.AvgH + 1/row.AvgD)
+			elif row.BET == 'HA':
+				return 1/(1/row.AvgH + 1/row.AvgA)
+			elif row.BET == 'D':
+				return row.AvgD
+			elif row.BET == 'AD':
+				return 1/(1/row.AvgD + 1/row.AvgA)
+			elif row.BET == 'A':
+				return row.AvgA
+			else:
+				return 0
+
+	def _return(self, row):
+		if row.FTR in row.BET:
+			return (self.stake/row.prediction_odds)*row.prediction_odds - (self.stake/row.prediction_odds)
+		elif row.BET == 'X':
+			return 0
+		else:
+			return -(self.stake/row.prediction_odds)
+
+
+	def calculate(self):
+		self.data['BET'] = self.data.apply(lambda row: self._bet(row), axis=1)
+		self.data['prediction_odds'] = self.data.apply(lambda row: self._prediction_odds(row), axis=1)
+		self.data['bet_return'] = self.data.apply(lambda row: self._return(row), axis=1)
+
+
+
+
+
+

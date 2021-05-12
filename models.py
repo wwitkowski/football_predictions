@@ -9,16 +9,17 @@ from scipy.stats import poisson, skellam
 class FootballPoissonModel():
 
 	
-	def __init__(self, data):
-		self.data = pd.concat([data[['team1', 'team2', 'score1']].assign(home=1).rename(
-			columns={'team1': 'team', 'team2': 'opponent', 'score1': 'goals'}),
-			data[['team2', 'team1', 'score2']].assign(home=0).rename(
-			columns={'team2': 'team', 'team1': 'opponent', 'score2': 'goals'})])
+	def __init__(self):
+		pass
 
 
-	def fit(self):
-		self.model = smf.glm(formula="goals ~ home + team + opponent", data=self.data, 
-			family=sm.families.Poisson()).fit()
+	def fit(self, df):
+		data = pd.concat([df[['team1', 'team2', 'score1']].assign(home=1).rename(
+						 columns={'team1': 'team', 'team2': 'opponent', 'score1': 'goals'}),
+						 df[['team2', 'team1', 'score2']].assign(home=0).rename(
+						 columns={'team2': 'team', 'team1': 'opponent', 'score2': 'goals'})])
+		self.model = smf.glm(formula="goals ~ home + team + opponent", data=data, 
+							 family=sm.families.Poisson()).fit()
 
 	@property
 	def summary(self):
@@ -39,13 +40,14 @@ class FootballPoissonModel():
 
 		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [home_goals, away_goals]]
 
-
+		# if len(np.shape(team_pred)) == 3:
 		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, np.shape(team_pred)[2])]
-
-
-		res = [[np.sum(np.tril(match_pred[i][0], -1)), np.sum(np.diag(match_pred[i][0])), np.sum(np.triu(match_pred[i][0], 1))] for i in range(0, len(match_pred))] 
-
+		res = [[np.sum(np.tril(match_pred[i][0], -1)), np.sum(np.diag(match_pred[i][0])), np.sum(np.triu(match_pred[i][0], 1))] for i in range(0, len(match_pred))]
 		return zip(*res)
+		# else:
+		# 	match_pred = np.outer(np.array(team_pred[0]), np.array(team_pred[1]))
+		# 	res = (np.sum(np.tril(match_pred, -1)), np.sum(np.diag(match_pred)), np.sum(np.triu(match_pred, 1)))
+		# 	return res
 
 
 class NeuralNetworkModel():
@@ -58,8 +60,8 @@ class NeuralNetworkModel():
 			self.model = tf.keras.models.load_model(f'models\\{self.name}.hdf5')
 
 
-	def build(self, n_features, activations, nodes, bias=None):
-		optimizer = 'adam'
+	def build(self, n_features, activations, nodes, dropout=0.0, optimizer='adam', bias=None):
+		optimizer = optimizer
 		loss = tf.keras.losses.MeanSquaredError()
 		metrics = ['mae']
 
@@ -74,7 +76,7 @@ class NeuralNetworkModel():
 		# Hidden layers
 		for i in range(1, len(activations)):
 			self.model.add(tf.keras.layers.Dense(nodes[i], activation=activations[i]))
-			#self.model.add(tf.keras.layers.Dropout(0.1))
+		self.model.add(tf.keras.layers.Dropout(dropout))
 
 		# Output layer
 		self.model.add(tf.keras.layers.Dense(2, bias_initializer=bias))
@@ -113,3 +115,7 @@ class NeuralNetworkModel():
 	def save(self, path):
 
 		self.model.save(path)
+
+	@property
+	def summary(self):
+		return self.model.summary()

@@ -20,7 +20,7 @@ class Source2:
 				'shots1', 'shots2', 'shotsot1', 'shotsot2', 
 				'fouls1', 'fouls2', 'corners1', 'corners2', 
 				'yellow1', 'yellow2', 'red1', 'red2', 
-				'MaxH', 'MaxD','MaxA', 'AvgH', 'AvgD', 'AvgA']
+				'MaxH', 'MaxD','MaxA', 'AvgH', 'AvgD', 'AvgA', ]
 
 	rename_dict = {'BbMxH': 'MaxH', 'BbMxD': 'MaxD', 
 					'BbMxA': 'MaxA', 'BbAvH': 'AvgH', 
