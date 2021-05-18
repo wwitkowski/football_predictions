@@ -21,11 +21,10 @@ class Distribution:
 		skew_sqrt = (3 * (sqrt.mean() - sqrt.median())) / sqrt.std()
 		skews[abs(skew_sqrt)] = sqrt
 
-		boxcox, _ = stats.boxcox(series)
-		skew_boxcox = (3 * (boxcox.mean() - np.median(boxcox))) / boxcox.std()
-		skews[abs(skew_boxcox)] = boxcox
+		# boxcox, _ = stats.boxcox(series)
+		# skew_boxcox = (3 * (boxcox.mean() - np.median(boxcox))) / boxcox.std()
+		# skews[abs(skew_boxcox)] = boxcox
 
-		#print([abs(key) for key in skews.keys()])
 		min_skew = min(skews.keys())
 
 		return skews[min_skew]
