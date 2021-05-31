@@ -39,9 +39,8 @@ class FootballPoissonModel():
 	def predict_chances(home_goals, away_goals, max_goals=10):
 
 		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [home_goals, away_goals]]
-
-		# if len(np.shape(team_pred)) == 3:
 		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, np.shape(team_pred)[2])]
+
 		res = [[np.sum(np.tril(match_pred[i][0], -1)), np.sum(np.diag(match_pred[i][0])), np.sum(np.triu(match_pred[i][0], 1))] for i in range(0, len(match_pred))]
 		return zip(*res)
 		# else:
@@ -49,6 +48,13 @@ class FootballPoissonModel():
 		# 	res = (np.sum(np.tril(match_pred, -1)), np.sum(np.diag(match_pred)), np.sum(np.triu(match_pred, 1)))
 		# 	return res
 
+	@staticmethod
+	def predict_overs(home_goals, away_goals, max_goals=10):
+		team_pred = [[poisson.pmf(i, team_avg) for i in range(0, max_goals + 1)] for team_avg in [home_goals, away_goals]]
+		match_pred = [[np.outer(np.array([i[j] for i in team_pred[0]]), np.array([i[j] for i in team_pred[1]]))] for j in range(0, np.shape(team_pred)[2])]
+
+		res = [[np.sum(np.triu(np.fliplr(match_pred[i]), -7)), np.sum(np.tril(np.fliplr(match_pred[i]), -8))] for i in range(0, len(match_pred))]
+		return zip(*res)
 
 class NeuralNetworkModel():
 
@@ -60,10 +66,11 @@ class NeuralNetworkModel():
 			self.model = tf.keras.models.load_model(f'models\\{self.name}.hdf5')
 
 
-	def build(self, n_features, activations, nodes, dropout=0.0, optimizer='adam', bias=None):
+	def build(self, n_features, activations, nodes, dropout=0.0, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		optimizer = optimizer
-		loss = tf.keras.losses.MeanSquaredError()
-		metrics = ['mae']
+		#loss = tf.keras.losses.MeanAbsoluteError()
+		loss = loss
+		metrics = metrics
 
 		if bias is not None:
 				bias = tf.keras.initializers.Constant(bias)
@@ -76,10 +83,10 @@ class NeuralNetworkModel():
 		# Hidden layers
 		for i in range(1, len(activations)):
 			self.model.add(tf.keras.layers.Dense(nodes[i], activation=activations[i]))
-		self.model.add(tf.keras.layers.Dropout(dropout))
+		#self.model.add(tf.keras.layers.Dropout(dropout))
 
 		# Output layer
-		self.model.add(tf.keras.layers.Dense(2, bias_initializer=bias))
+		self.model.add(tf.keras.layers.Dense(2, activation='exponential', bias_initializer=bias))
 
 		self.model.compile(
 			optimizer=optimizer,
@@ -93,13 +100,13 @@ class NeuralNetworkModel():
 														 monitor='val_loss',
 														 save_best_only=True)
 
-		early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100, verbose=0)
+		early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=True, verbose=0)
 
 		self.history = self.model.fit(X_train, y_train,
 									  batch_size=batch_size,
 									  verbose=verbose,
 									  epochs=epochs,
-									  callbacks=[checkpoint, early_stopping],
+									  callbacks=[early_stopping],
 									  validation_data=(X_val, y_val))
 
 		return self.history

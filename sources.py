@@ -20,7 +20,8 @@ class Source2:
 				'shots1', 'shots2', 'shotsot1', 'shotsot2', 
 				'fouls1', 'fouls2', 'corners1', 'corners2', 
 				'yellow1', 'yellow2', 'red1', 'red2', 
-				'MaxH', 'MaxD','MaxA', 'AvgH', 'AvgD', 'AvgA', ]
+				'MaxH', 'MaxD','MaxA', 'AvgH', 'AvgD', 'AvgA', 
+				'Max>2.5', 'Max<2.5', 'Avg>2.5', 'Avg<2.5']
 
 	rename_dict = {'BbMxH': 'MaxH', 'BbMxD': 'MaxD', 
 					'BbMxA': 'MaxA', 'BbAvH': 'AvgH', 
@@ -30,4 +31,8 @@ class Source2:
 					'HF': 'fouls1', 'AF': 'fouls2', 
 					'HC': 'corners1', 'AC': 'corners2', 
 					'HY': 'yellow1', 'AY': 'yellow2', 
-					'HR': 'red1', 'AR': 'red2'}
+					'HR': 'red1', 'AR': 'red2',
+					'BbMx>2.5': 'Max>2.5', 
+					'BbMx<2.5': 'Max<2.5', 
+					'BbAv>2.5': 'Avg>2.5', 
+					'BbAv<2.5': 'Avg<2.5'}

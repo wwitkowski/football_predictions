@@ -327,7 +327,7 @@ class TeamStats:
 		# Collect data for all teams
 		for team in teams_dict.keys():
 			team_data = past_data[((past_data.team1 == team) | (past_data.team2 == team)) & (past_data.league == teams_dict[team])].tail(past_matches_num).copy()
-			if team_data.shape[0] < self.min_matches:
+			if team_data.shape[0] <= self.min_matches:
 				continue
 			concat_data = pd.concat([concat_data, team_data], ignore_index=True)
 
@@ -338,7 +338,7 @@ class TeamStats:
 
 		# Take the past data to calculate the stats
 		past_data = df[df.date < date].copy()
-		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'HomeTeam', 'AwayTeam', 'shots1', 'shots2'], inplace=True)
+		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'HomeTeam', 'AwayTeam', 'shots1', 'shots2'], inplace=True)
 
 		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
 		
@@ -473,7 +473,7 @@ class Bookmaker():
 			elif row.BET == 'A':
 				return row.MaxA
 			else:
-				return 0
+				return 1
 		if self.odds == 'avg':
 			if row.BET == 'H':
 				return row.AvgH
@@ -488,7 +488,7 @@ class Bookmaker():
 			elif row.BET == 'A':
 				return row.AvgA
 			else:
-				return 0
+				return 1
 
 	def _return(self, row):
 		if row.FTR in row.BET:
@@ -498,11 +498,64 @@ class Bookmaker():
 		else:
 			return -(self.stake/row.prediction_odds)
 
+	def _over_under(self, row):
+		if row.score1 + row.score2 > 2.5:
+			return 'Over'
+		else:
+			return 'Under'		
+
+
+	def _bet_over(self, row):
+		if self.odds == 'max':
+			if row['Max>2.5'] > 1/row['>2.5_pred']:
+				return 'Over'
+			elif row['Max<2.5'] > 1/row['<2.5_pred']:
+				return 'Under'
+			else:
+				return 'X'
+		if self.odds == 'avg':
+			if row['Avg>2.5'] > 1/row['>2.5_pred']:
+				return 'Over'
+			elif row['Avg<2.5'] > 1/row['<2.5_pred']:
+				return 'Under'
+			else:
+				return 'X'
+
+
+	def _prediction_odds_over(self, row):
+		if self.odds == 'max':
+			if row.BET_OVER_UNDER == 'Over':
+				return row['Max>2.5']
+			elif row.BET_OVER_UNDER == 'Under':
+				return row['Max<2.5']
+			else:
+				return 1
+		if self.odds == 'avg':
+			if row.BET_OVER_UNDER == 'Over':
+				return row['Max>2.5']
+			elif row.BET_OVER_UNDER == 'Under':
+				return row['Max<2.5']
+			else:
+				return 1
+
+	def _return_over(self, row):
+		if row.OVER_UNDER in row.BET_OVER_UNDER:
+			return (self.stake/row.prediction_odds_over)*row.prediction_odds_over - (self.stake/row.prediction_odds_over)
+		elif row.BET_OVER_UNDER == 'X':
+			return 0
+		else:
+			return -(self.stake/row.prediction_odds_over)
+
 
 	def calculate(self):
 		self.data['BET'] = self.data.apply(lambda row: self._bet(row), axis=1)
 		self.data['prediction_odds'] = self.data.apply(lambda row: self._prediction_odds(row), axis=1)
 		self.data['bet_return'] = self.data.apply(lambda row: self._return(row), axis=1)
+
+		self.data['OVER_UNDER'] = self.data.apply(lambda row: self._over_under(row), axis=1)
+		self.data['BET_OVER_UNDER'] = self.data.apply(lambda row: self._bet_over(row), axis=1)
+		self.data['prediction_odds_over'] = self.data.apply(lambda row: self._prediction_odds_over(row), axis=1)
+		self.data['bet_return_over'] = self.data.apply(lambda row: self._return_over(row), axis=1)
 
 
 
