@@ -66,7 +66,7 @@ class NeuralNetworkModel():
 			self.model = tf.keras.models.load_model(f'models\\{self.name}.hdf5')
 
 
-	def build(self, n_features, activations, nodes, dropout=0.0, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
+	def build(self, n_features, activations=('relu', 'relu'), nodes=(50, 50), dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		optimizer = optimizer
 		#loss = tf.keras.losses.MeanAbsoluteError()
 		loss = loss
@@ -83,10 +83,11 @@ class NeuralNetworkModel():
 		# Hidden layers
 		for i in range(1, len(activations)):
 			self.model.add(tf.keras.layers.Dense(nodes[i], activation=activations[i]))
-		#self.model.add(tf.keras.layers.Dropout(dropout))
+		if dropout:
+			self.model.add(tf.keras.layers.Dropout(dropout))
 
 		# Output layer
-		self.model.add(tf.keras.layers.Dense(2, activation='exponential', bias_initializer=bias))
+		self.model.add(tf.keras.layers.Dense(1, activation='exponential', bias_initializer=bias))
 
 		self.model.compile(
 			optimizer=optimizer,
