@@ -59,14 +59,16 @@ class FootballPoissonModel():
 class NeuralNetworkModel():
 
 
-	def __init__(self, name=None):
+	def __init__(self, n_features, name=None, activations=('relu', 'relu'), nodes=(50, 50), dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		self.name = name
 
 		if self.name is not None:
 			self.model = tf.keras.models.load_model(f'models\\{self.name}.hdf5')
+		else:
+			self._build(n_features=n_features, activations=activations, nodes=nodes, dropout=dropout, optimizer=optimizer, loss=loss, metrics=metrics, bias=bias)
 
 
-	def build(self, n_features, activations=('relu', 'relu'), nodes=(50, 50), dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
+	def _build(self, n_features, activations=('relu', 'relu'), nodes=(50, 50), dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		optimizer = optimizer
 		#loss = tf.keras.losses.MeanAbsoluteError()
 		loss = loss
@@ -95,7 +97,7 @@ class NeuralNetworkModel():
 			metrics=metrics)
 
 
-	def train(self, X_train, y_train, X_val, y_val, verbose=1, batch_size=256, epochs=200):
+	def fit(self, X_train, y_train, X_val, y_val, verbose=1, batch_size=256, epochs=200):
 
 		checkpoint = tf.keras.callbacks.ModelCheckpoint(f"models\\nn_model.hdf5",
 														 monitor='val_loss',
