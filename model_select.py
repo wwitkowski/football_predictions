@@ -16,6 +16,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.experimental import enable_hist_gradient_boosting
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.ensemble import ExtraTreesRegressor
+from sklearn.cluster import KMeans
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor, Pool
 from models import NeuralNetworkModel, FootballPoissonModel
@@ -24,15 +25,19 @@ from functools import partial
 from hyperopt import hp, fmin, tpe, Trials
 from hyperopt.pyll.base import scope
 
+import matplotlib.pyplot as plt
+from kneed import KneeLocator
+
+pd.set_option('mode.chained_assignment', None)
+
 
 def evaluate(model, model_name, df_train, target, features, testing=True, df_test=None, cv=None):
 
-	
-	scaler = StandardScaler()
 	df_train = df_train[features]
+	scaler = StandardScaler()
 
 	if cv:
-		kf = KFold(n_splits=cv)
+		kf = KFold(n_splits=cv, shuffle=True, random_state=42)
 		df_train_copy = df_train.copy()
 		target_copy = target.copy()
 
@@ -49,8 +54,17 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 			print(f'training {model_name}... split: ({i+1}/{cv})')
 
 			train, test = fold			
+			# transformer = FeatureTransformer()
+			# transformer.fit(df_train_copy.iloc[train])
+
+			# X_train = transformer.transform(df_train_copy.iloc[train])
+			# X_train = scaler.fit_transform(X_train.values)
 			X_train = scaler.fit_transform(df_train_copy.iloc[train].values)
+
+			# X_val = transformer.transform(df_train_copy.iloc[test])
+			# X_val = scaler.transform(X_val.values)
 			X_val = scaler.transform(df_train_copy.iloc[test].values)
+
 			y_train = target_copy[train]
 			y_val = target_copy[test]
 
@@ -59,7 +73,7 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 			if 'NeuralNet' in model_name:
 				# model.build(n_features=X_train.shape[1])
 				# model.train(X_train, y_train, X_val, y_val, verbose=0)
-				model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), batch_size=494, verbose=0)
+				model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), batch_size=32, verbose=0)
 			elif 'CatBoost' in model_name:
 				model.fit(X_train, y_train, eval_set=(X_val, np.sqrt(y_val + 1)), early_stopping_rounds=10)
 			elif 'XGB' in model_name:
@@ -77,9 +91,18 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 			rmse.append(np.sqrt(mean_squared_error(y_val, y_pred)))
 
 	if testing:
-		X_train, X_val, y_train, y_val = train_test_split(df_train, target, test_size=0.25, random_state=0)
+		X_train, X_val, y_train, y_val = train_test_split(df_train, target, test_size=0.1, random_state=0)
 		# Scale data
+
+		# transformer = FeatureTransformer()
+		# transformer.fit(df_train_copy.iloc[train])
+
+		# X_train = transformer.transform(df_train_copy.iloc[train])
+		# X_train = scaler.fit_transform(X_train.values)
 		X_train = scaler.fit_transform(X_train.values)
+
+		# X_val = transformer.transform(df_train_copy.iloc[test])
+		# X_val = scaler.transform(X_val.values)
 		X_val = scaler.transform(X_val.values)
 
 		y_train = np.sqrt(y_train + 1)
@@ -87,7 +110,7 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		if 'NeuralNet' in model_name:
 			# model.build(n_features=X_train.shape[1])
 			# model.train(X_train, y_train, X_val, y_val, verbose=0)
-			model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), batch_size=494, verbose=0)
+			model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), batch_size=32, verbose=0)
 		elif 'CatBoost' in model_name:
 			model.fit(X_train, y_train, eval_set=(X_val, np.sqrt(y_val + 1)), early_stopping_rounds=10)
 		elif 'XGB' in model_name:
@@ -103,11 +126,14 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		X_test_home = X_test_home[features]
 		X_test_away = X_test_away[features]
 
-		X_test_home = scaler.transform(X_test_home.values)
-		X_test_away = scaler.transform(X_test_away.values)
+		# X_test_home = transformer.transform(X_test_home)
+		# X_test_away = transformer.transform(X_test_away)
 
-		# score1_pred = model.predict(X_test_home)
-		# score2_pred = model.predict(X_test_away)
+		X_test_home = scaler.transform(X_test_home)
+		X_test_away = scaler.transform(X_test_away)
+
+		score1_pred = model.predict(X_test_home)
+		score2_pred = model.predict(X_test_away)
 		score1_pred = np.power(model.predict(X_test_home), 2) -1
 		score2_pred = np.power(model.predict(X_test_away), 2) -1
 		score1_pred = score1_pred.clip(min = .01)
@@ -117,6 +143,13 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		mae_test.append((mean_absolute_error(y_test_home, score1_pred) + mean_absolute_error(y_test_away, score2_pred)) /2)
 		pdev_test.append((mean_poisson_deviance(y_test_home, score1_pred) + mean_poisson_deviance(y_test_away, score2_pred)) /2)
 		rmse_test.append((np.sqrt(mean_squared_error(y_test_home, score1_pred)) + np.sqrt(mean_squared_error(y_test_away, score2_pred))) /2)
+
+		df_error = df_test.copy()
+		preds = np.concatenate((score1_pred, score2_pred), axis=None)
+		df_error['pred'] = preds
+		df_error['mae'] = np.absolute(df_error['score1'] - df_error['pred'])
+		df_error['mse'] = np.absolute((df_error['score1'] - df_error['pred'])) ** 2
+		df_error.to_csv(f'{model_name}_test_errors.csv')
 
 		foot_poisson = FootballPoissonModel()
 		home_win, draw, away_win = foot_poisson.predict_chances(score1_pred, score2_pred)
@@ -133,8 +166,6 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		book = Bookmaker(df_predictions, odds='max', stake=5)
 		book.calculate()
 
-
-
 		returns = df_predictions[['bet_return']].sum().values
 		returns_over = df_predictions[['bet_return_over']].sum().values
 
@@ -145,10 +176,10 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 def optimize(params, name, df_train, df_target):
 	
 
-	scaler = StandardScaler()
 	df_train = df_train[list(params['features'])]
+	scaler = StandardScaler()
 
-	kf = KFold(n_splits=4)
+	kf = KFold(n_splits=4, shuffle=True, random_state=42)
 	df_train_copy = df_train.copy()
 	target_copy = df_target.copy()
 
@@ -159,9 +190,16 @@ def optimize(params, name, df_train, df_target):
 	returns = []
 	returns_over = []
 
-	for train, test in kf.split(df_train_copy):		
-		X_train = scaler.fit_transform(df_train_copy.iloc[train].values)
-		X_val = scaler.transform(df_train_copy.iloc[test].values)
+	for train, test in kf.split(df_train_copy):
+		transformer = FeatureTransformer()
+		transformer.fit(df_train_copy.iloc[train])
+
+		X_train = transformer.transform(df_train_copy.iloc[train])
+		X_train = scaler.fit_transform(X_train.values)
+
+		X_val = transformer.transform(df_train_copy.iloc[test])
+		X_val = scaler.transform(X_val.values)
+
 		y_train = target_copy[train]
 		y_val = target_copy[test]
 
@@ -289,6 +327,7 @@ pd.set_option('display.max_rows', 500)
 df = pd.read_csv('training_data\\training_data_decay00325_num40_wluck.csv')
 df.importance1.fillna(value=df.importance1.mean(), inplace=True)
 df.importance2.fillna(value=df.importance2.mean(), inplace=True)
+df = df.rename(columns={'matchday': 'matchday_home'})
 df.dropna(inplace=True)
 
 df.drop(['weight', 'weight_away'], axis=1, inplace=True)
@@ -313,211 +352,354 @@ df_test_transformed = pd.concat([df_test.assign(home=1),
 					  df_test.assign(home=0).rename(columns=rename_away_stats_dict)], sort=False, ignore_index=True).copy()
 
 
-features_more = ['spi1','importance1','shots1_home','shots2_home','shotsot1_home','shotsot2_home',
-			'fouls1_home','corners1_home','corners2_home','adj_avg_xg1_home','adj_avg_xg2_home',
-			'xwin1_home','xwin2_home','xpts1_home','xpts2_home','xgshot1_home','convrate1_home',
-			'shots2_away','shotsot2_away','corners2_away','adj_avg_xg1_away','adj_avg_xg2_away',
-			'xwin1_away','xwin2_away','xpts1_away','xpts2_away',
-			'home','xg1_league','xg2_league','A','H','score1_similar','score2_similar']
-features_less = ['spi1','importance1','fouls1_home','adj_avg_xg1_home','convrate1_home',
-			'corners2_away','adj_avg_xg2_away','xg1_league','xg2_league','score1_similar',
-			'score2_similar']
-strght_features_more = ['strght_spi1','strght_importance1','strght_shots1_home','strght_shots2_home','strght_shotsot1_home','strght_shotsot2_home',
-			'strght_fouls1_home','strght_corners1_home','strght_corners2_home','strght_adj_avg_xg1_home','strght_adj_avg_xg2_home',
-			'strght_xwin1_home','strght_xwin2_home','strght_xpts1_home','strght_xpts2_home','strght_xgshot1_home','strght_convrate1_home',
-			'strght_shots2_away','strght_shotsot2_away','strght_corners2_away','strght_adj_avg_xg1_away','strght_adj_avg_xg2_away',
-			'strght_xwin1_away','strght_xwin2_away','strght_xpts1_away','strght_xpts2_away',
-			'home','strght_xg1_league','strght_xg2_league','strght_A','strght_H','strght_score1_similar','strght_score2_similar']
-strght_features_less = ['strght_spi1','strght_importance1','strght_fouls1_home','strght_adj_avg_xg1_home','strght_convrate1_home',
-			'strght_corners2_away','strght_adj_avg_xg2_away','strght_xg1_league','strght_xg2_league','strght_score1_similar',
-			'strght_score2_similar']
+df_train_transformed['spi_diff'] = df_train_transformed['spi1'] - df_train_transformed['spi2']
+df_train_transformed['importance_diff'] = df_train_transformed['importance1'] - df_train_transformed['importance2']
+
+df_train_transformed['adj_avg_xg1_diff'] = df_train_transformed['adj_avg_xg1_home'] - df_train_transformed['adj_avg_xg1_away']
+df_train_transformed['adj_avg_xg2_diff'] = df_train_transformed['adj_avg_xg2_home'] - df_train_transformed['adj_avg_xg2_away']
+df_train_transformed['adj_avg_xg_diff_home'] = df_train_transformed['adj_avg_xg1_home'] - df_train_transformed['adj_avg_xg2_home']
+df_train_transformed['adj_avg_xg_diff_away'] = df_train_transformed['adj_avg_xg1_away'] - df_train_transformed['adj_avg_xg2_away']
+
+df_train_transformed['shotsot1_diff'] = df_train_transformed['shotsot1_home'] - df_train_transformed['shotsot1_away']
+df_train_transformed['shotsot2_diff'] = df_train_transformed['shotsot2_home'] - df_train_transformed['shotsot2_away']
+df_train_transformed['shotsot_diff_home'] = df_train_transformed['shotsot1_home'] - df_train_transformed['shotsot2_home']
+df_train_transformed['shotsot_diff_away'] = df_train_transformed['shotsot1_away'] - df_train_transformed['shotsot2_away']
+
+df_train_transformed['corners1_diff'] = df_train_transformed['corners1_home'] - df_train_transformed['corners1_away']
+df_train_transformed['corners2_diff'] = df_train_transformed['corners2_home'] - df_train_transformed['corners2_away']
+
+df_train_transformed['xpts1_diff'] = df_train_transformed['xpts1_home'] - df_train_transformed['xpts1_away']
+
+df_train_transformed['xgshot1_diff'] = df_train_transformed['xgshot1_home'] - df_train_transformed['xgshot1_away']
+df_train_transformed['convrate1_diff'] = df_train_transformed['convrate1_home'] - df_train_transformed['convrate1_away']
+
+df_train_transformed['month'] = pd.to_datetime(df_train_transformed['date']).dt.month
+bins = [0, 10, 20, 30, 40, 50]
+labels = ['<10', '11-20', '21-30', '31-40', '41-50']
+df_train_transformed['matchday_binned'] = pd.cut(df_train_transformed['matchday_home'], bins=bins, labels=labels)
+
+
+df_test_transformed['spi_diff'] = df_test_transformed['spi1'] - df_test_transformed['spi2']
+df_test_transformed['importance_diff'] = df_test_transformed['importance1'] - df_test_transformed['importance2']
+
+df_test_transformed['adj_avg_xg1_diff'] = df_test_transformed['adj_avg_xg1_home'] - df_test_transformed['adj_avg_xg1_away']
+df_test_transformed['adj_avg_xg2_diff'] = df_test_transformed['adj_avg_xg2_home'] - df_test_transformed['adj_avg_xg2_away']
+df_test_transformed['adj_avg_xg_diff_home'] = df_test_transformed['adj_avg_xg1_home'] - df_test_transformed['adj_avg_xg2_home']
+df_test_transformed['adj_avg_xg_diff_away'] = df_test_transformed['adj_avg_xg1_away'] - df_test_transformed['adj_avg_xg2_away']
+
+df_test_transformed['shotsot1_diff'] = df_test_transformed['shotsot1_home'] - df_test_transformed['shotsot1_away']
+df_test_transformed['shotsot2_diff'] = df_test_transformed['shotsot2_home'] - df_test_transformed['shotsot2_away']
+df_test_transformed['shotsot_diff_home'] = df_test_transformed['shotsot1_home'] - df_test_transformed['shotsot2_home']
+df_test_transformed['shotsot_diff_away'] = df_test_transformed['shotsot1_away'] - df_test_transformed['shotsot2_away']
+
+df_test_transformed['corners1_diff'] = df_test_transformed['corners1_home'] - df_test_transformed['corners1_away']
+df_test_transformed['corners2_diff'] = df_test_transformed['corners2_home'] - df_test_transformed['corners2_away']
+
+df_test_transformed['xpts1_diff'] = df_test_transformed['xpts1_home'] - df_test_transformed['xpts1_away']
+
+df_test_transformed['xgshot1_diff'] = df_test_transformed['xgshot1_home'] - df_test_transformed['xgshot1_away']
+df_test_transformed['convrate1_diff'] = df_test_transformed['convrate1_home'] - df_test_transformed['convrate1_away']
+
+df_test_transformed['month'] = pd.to_datetime(df_test_transformed['date']).dt.month
+df_test_transformed['matchday_binned'] = pd.cut(df_test_transformed['matchday_home'], bins=bins, labels=labels)
+
+
+numerical_features = [
+			#'spi1','importance1',
+			#'shots1_home','shots2_home','shotsot1_home','shotsot2_home', 
+			'fouls1_home',
+			#'corners1_home','corners2_home','adj_avg_xg1_home','adj_avg_xg2_home',
+			'xwin1_home','xwin2_home',
+			#'xpts1_home',
+			'xpts2_home',
+			'xgshot1_home','convrate1_home',
+			#'shots2_away','shotsot2_away', 
+			#'corners2_away', 'adj_avg_xg1_away','adj_avg_xg2_away',
+			'xwin1_away','xwin2_away',
+			#'xpts1_away',
+			'xpts2_away',
+			'xg1_league','xg2_league','A','H','score1_similar','score2_similar',
+			'spi_diff',  
+			'importance_diff', 
+			'adj_avg_xg1_diff', 
+			'adj_avg_xg2_diff',
+			'adj_avg_xg_diff_home',
+			'adj_avg_xg_diff_away',
+			# # 'shotsot1_diff',
+			# # 'shotsot2_diff',
+			'shotsot_diff_home',
+			'shotsot_diff_away',
+			'corners1_diff',
+			'corners2_diff',
+			'xpts1_diff',
+			# # 'xgshot1_diff',
+			# # 'convrate1_diff'
+			]
+
+
+categorical_features = ['home',
+			'month_1',
+			'month_2',
+			'month_3',
+			'month_4',
+			'month_5',
+			'month_7',
+			'month_8',
+			'month_9',
+			'month_10',
+			'month_11',
+			'month_12',
+			'matchday_<10', 'matchday_11-20', 'matchday_21-30', 'matchday_31-40', 'matchday_41-50',
+			'cluster_0', 'cluster_1', 'cluster_2', 'cluster_3',
+			'league_1843.0', 'league_1845.0', 'league_1846.0', 'league_1854.0', 'league_1856.0',
+			'league_1864.0', 'league_1869.0', 'league_2411.0', 'league_2412.0']
+
 
 target_train_transformed = df_train_transformed.score1.values
 
-transformer = FeatureTransformer()
-transformer.fit(df_train_transformed[features_more])
-df_train_transformed_strght = transformer.transform(df_train_transformed[features_more])
-print(df_train_transformed_strght)
-print(transformer.transformations_)
+print(f'Number of NA values: {df_train_transformed.isna().sum().sum()}')
+print(f'Number of INF values: {df_train_transformed.replace([np.inf, -np.inf], np.nan).isna().sum().sum()}')
 
-# dist = Distribution()
-# for column in df_train_transformed:
-# 	if df_train_transformed[column].dtype == 'float64':
-# 		if not df_train_transformed[column].lt(0).any():
-# 			df_train_transformed[f'strght_{column}'] = dist.straighten(df_train_transformed[column] + 0.001)
-# 		else:
-# 			df_train_transformed[f'strght_{column}'] = df_train_transformed[column]
-
-# print(f'Number of NA values: {df_train_transformed.isna().sum().sum()}')
-# print(f'Number of INF values: {df_train_transformed.replace([np.inf, -np.inf], np.nan).isna().sum().sum()}')
+kmeans_kwargs = {
+		"init": "random",
+		"n_init": 10,
+		"max_iter": 300,
+		"random_state": 42,
+		}
 
 
-# try:
-# 	scope.define(tf.keras.optimizers.Adam)
-# 	scope.define(tf.keras.optimizers.Adagrad)
-# 	scope.define(tf.keras.optimizers.RMSprop)
-# 	scope.define(tf.keras.optimizers.Nadam)
-# 	scope.define(tf.keras.optimizers.SGD)
-# except ValueError:
-# 	pass
-
-# neuralnet_space = hp.choice('model',
-# 			[{'num_layers': 2,  'batch_2': scope.int(hp.quniform('batch_2', 32, 2048, 2)),		
-# 								'activations_21': hp.choice('activations_21', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
-# 								'activations_22': hp.choice('activations_22', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
-# 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
-# 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
-# 								'loss_2': hp.choice('loss_2', ['poisson', 'mae', 'logcosh', 'huber_loss']),
-# 								'features': hp.choice('features_2', [features_more]),
-# 								'optimizer_2': hp.choice('optimizer_2', [
-# 									scope.Adam(
-# 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.005))),
-# 									scope.Adagrad(
-# 										learning_rate=hp.loguniform('adagrad_learning_rate_2', np.log(0.001), np.log(0.005))),
-# 									scope.RMSprop(
-# 										learning_rate=hp.loguniform('rmsprop_learning_rate_2', np.log(0.001), np.log(0.005))),
-# 									scope.Nadam(
-# 										learning_rate=hp.loguniform('nadam_learning_rate_2', np.log(0.001), np.log(0.005))),
-# 									scope.SGD(
-# 										learning_rate=hp.loguniform('sgd_learning_rate_2', np.log(0.001), np.log(0.005)))
-# 									])}
-# 			 # {'num_layers': 3,  'batch_3': scope.int(hp.quniform('batch_3', 32, 2048, 2)),		
-# 				# 				'activations_31': hp.choice('activations_31', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
-# 				# 				'activations_32': hp.choice('activations_32', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
-# 				# 				'activations_33': hp.choice('activations_33', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
-# 				# 				'nodes_31': scope.int(hp.qloguniform('nodes_31', np.log(2), np.log(1024), 2)),
-# 				# 				'nodes_32': scope.int(hp.qloguniform('nodes_32', np.log(2), np.log(1024), 2)),
-# 				# 				'nodes_33': scope.int(hp.qloguniform('nodes_33', np.log(2), np.log(1024), 2)),
-# 				# 				'loss_3': hp.choice('loss_3', ['poisson', 'mae', 'logcosh', 'huber_loss']),
-# 				# 				'features': hp.choice('features_3', [features_more]),
-# 				# 				'optimizer_3': hp.choice('optimizer_3', [
-# 				# 					scope.Adam(
-# 				# 						learning_rate=hp.loguniform('adam_learning_rate_3', np.log(0.001), np.log(0.002))),
-# 				# 					scope.Adagrad(
-# 				# 						learning_rate=hp.loguniform('adagrad_learning_rate_3', np.log(0.001), np.log(0.002))),
-# 				# 					scope.RMSprop(
-# 				# 						learning_rate=hp.loguniform('rmsprop_learning_rate_3', np.log(0.001), np.log(0.002))),
-# 				# 					scope.Nadam(
-# 				# 						learning_rate=hp.loguniform('nadam_learning_rate_3', np.log(0.001), np.log(0.002))),
-# 				# 					scope.SGD(
-# 				# 						learning_rate=hp.loguniform('sgd_learning_rate_3', np.log(0.001), np.log(0.002)))
-# 				# 					])}
-# 								])
+train_scaled = df_train_transformed[numerical_features]
+# transformer = FeatureTransformer()
+# transformer.fit(df_train_transformed)
+# df_train_strght = transformer.transform(df_train_transformed)
 
 
-# xgb_space = {
-# 		'n_estimators': scope.int(hp.quniform('n_estimators', 100, 1000, 1)),
-# 		'eta': hp.quniform('eta', 0.025, 0.5, 0.025),
-# 		'max_depth':  scope.int(hp.quniform('max_depth', 2, 20, 1)),
-# 		'min_child_weight': scope.int(hp.quniform('min_child_weight', 1, 6, 1)),
-# 		'subsample': hp.quniform('subsample', 0.5, 1, 0.05),
-# 		'gamma': hp.quniform('gamma', 0.5, 3, 0.05),
-# 		'colsample_bytree': hp.quniform('colsample_bytree', 0.5, 1, 0.05),
-# 		'features': hp.choice('features', [features_more]),
-# 		'objective': hp.choice('objective', ['count:poisson', 'reg:squarederror'])
-# 		#'lambda': hp.quniform('lambda', 0, 5, 0.1),
-# 		#'alpha': hp.quniform('alpha', 0, 3, 0.1),
-# 		}
+scaler = StandardScaler()
+train_scaled = scaler.fit_transform(train_scaled.values)
+
+# sse = []
+# for k in range(1, 11):
+# 	kmeans = KMeans(n_clusters=k, **kmeans_kwargs)
+# 	kmeans.fit(scaled)
+# 	sse.append(kmeans.inertia_)
+
+# plt.plot(range(1, 11), sse)
+# plt.xticks(range(1, 11))
+# plt.xlabel("Number of Clusters")
+# plt.ylabel("SSE")
+# plt.show()
+
+# kl = KneeLocator(range(1, 11), sse, curve="convex", direction="decreasing")
+# print(kl.elbow)
+
+kmeans = KMeans(n_clusters=4, **kmeans_kwargs)
+kmeans.fit(train_scaled)
+df_train_transformed['cluster'] = kmeans.labels_
+one_hot = pd.get_dummies(df_train_transformed['cluster'], prefix='cluster')
+df_train_transformed = df_train_transformed.drop('cluster',axis = 1)
+df_train_transformed = df_train_transformed.join(one_hot)
 
 
-# catboost_space = {
-# 		'learning_rate': hp.uniform('learning_rate', 0.01, 0.8),
-# 		#'l2_leaf_reg': hp.uniform('l2_leaf_reg', 0.0, 5.0),
-# 		'max_depth': scope.int(hp.quniform('max_depth', 1, 10, 1)),
-# 		'colsample_bylevel': hp.uniform('colsample_bylevel', 0.2, 1.0),
-# 		'bagging_temperature': hp.uniform('bagging_temperature', 0.0, 100),
-# 		'random_strength': hp.uniform('random_strength', 0.0, 100),
-# 		'objective': hp.choice('objective', ['Poisson', 'MAE', 'Huber:delta=200']),
-# 		'features': hp.choice('features', [features_more])
-# 		# 'pca_n_components': scope.int(hp.quniform('pca_n_components', 2, 30, 1))
-# 		}
+one_hot = pd.get_dummies(df_train_transformed['league_id'], prefix='league')
+df_train_transformed = df_train_transformed.drop('league_id',axis = 1)
+df_train_transformed = df_train_transformed.join(one_hot)
+
+one_hot = pd.get_dummies(df_train_transformed['matchday_binned'], prefix='matchday')
+df_train_transformed = df_train_transformed.drop('matchday_binned',axis = 1)
+df_train_transformed = df_train_transformed.join(one_hot)
+
+one_hot = pd.get_dummies(df_train_transformed['month'], prefix='month')
+df_train_transformed = df_train_transformed.drop('month',axis = 1)
+df_train_transformed = df_train_transformed.join(one_hot)
 
 
-# extratrees_space = {
-# 		'n_estimators': scope.int(hp.quniform('n_estimators', 100, 1000, 1)),
-# 		'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
-# 		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 20, 1)),
-# 		'max_features': hp.choice('max_features', ['auto', 'sqrt', 'log2']),
-# 		'features': hp.choice('features', [features_more])
-# 		}
+test_scaled = scaler.transform(df_test_transformed[numerical_features].values)
+df_test_transformed['cluster'] = kmeans.predict(test_scaled)
+one_hot = pd.get_dummies(df_test_transformed['cluster'], prefix='cluster')
+df_test_transformed = df_test_transformed.drop('cluster', axis = 1)
+df_test_transformed = df_test_transformed.join(one_hot)
+
+one_hot = pd.get_dummies(df_test_transformed['league_id'], prefix='league')
+df_test_transformed = df_test_transformed.drop('league_id',axis = 1)
+df_test_transformed = df_test_transformed.join(one_hot)
+
+one_hot = pd.get_dummies(df_test_transformed['matchday_binned'], prefix='matchday')
+df_test_transformed = df_test_transformed.drop('matchday_binned',axis = 1)
+df_test_transformed = df_test_transformed.join(one_hot)
+
+one_hot = pd.get_dummies(df_test_transformed['month'], prefix='month')
+df_test_transformed = df_test_transformed.drop('month',axis = 1)
+df_test_transformed = df_test_transformed.join(one_hot)
 
 
-# histgradboost_space = {
-# 		'learning_rate': hp.uniform('learning_rate', 0.01, 0.8),
-# 		'max_leaf_nodes': scope.int(hp.quniform('max_leaf_nodes', 2, 60, 1)),
-# 		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 60, 1)),
-# 		'features': hp.choice('features', [features_more])
-# 		}
+print(df_train_transformed.columns.values)
+
+try:
+	scope.define(tf.keras.optimizers.Adam)
+	scope.define(tf.keras.optimizers.Adagrad)
+	scope.define(tf.keras.optimizers.RMSprop)
+	scope.define(tf.keras.optimizers.Nadam)
+	scope.define(tf.keras.optimizers.SGD)
+except ValueError:
+	pass
+
+neuralnet_space = hp.choice('model',
+			[{'num_layers': 2,  'batch_2': scope.int(hp.quniform('batch_2', 32, 1256, 2)),		
+								'activations_21': hp.choice('activations_21', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
+								'activations_22': hp.choice('activations_22', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
+								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
+								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
+								'loss_2': hp.choice('loss_2', ['poisson', 'mae', 'logcosh', 'huber_loss']),
+								'features': hp.choice('features_2', [numerical_features]),
+								'optimizer_2': hp.choice('optimizer_2', [
+									scope.Adam(
+										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
+									scope.Adagrad(
+										learning_rate=hp.loguniform('adagrad_learning_rate_2', np.log(0.001), np.log(0.002))),
+									scope.RMSprop(
+										learning_rate=hp.loguniform('rmsprop_learning_rate_2', np.log(0.001), np.log(0.002))),
+									scope.Nadam(
+										learning_rate=hp.loguniform('nadam_learning_rate_2', np.log(0.001), np.log(0.002))),
+									scope.SGD(
+										learning_rate=hp.loguniform('sgd_learning_rate_2', np.log(0.001), np.log(0.002)))
+									])}
+			 # {'num_layers': 3,  'batch_3': scope.int(hp.quniform('batch_3', 32, 1256, 2)),		
+				# 				'activations_31': hp.choice('activations_31', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
+				# 				'activations_32': hp.choice('activations_32', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
+				# 				'activations_33': hp.choice('activations_33', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
+				# 				'nodes_31': scope.int(hp.qloguniform('nodes_31', np.log(2), np.log(1024), 2)),
+				# 				'nodes_32': scope.int(hp.qloguniform('nodes_32', np.log(2), np.log(1024), 2)),
+				# 				'nodes_33': scope.int(hp.qloguniform('nodes_33', np.log(2), np.log(1024), 2)),
+				# 				'loss_3': hp.choice('loss_3', ['poisson', 'mae', 'logcosh', 'huber_loss']),
+				# 				'features': hp.choice('features_3', [numerical_features]),
+				# 				'optimizer_3': hp.choice('optimizer_3', [
+				# 					scope.Adam(
+				# 						learning_rate=hp.loguniform('adam_learning_rate_3', np.log(0.001), np.log(0.002))),
+				# 					scope.Adagrad(
+				# 						learning_rate=hp.loguniform('adagrad_learning_rate_3', np.log(0.001), np.log(0.002))),
+				# 					scope.RMSprop(
+				# 						learning_rate=hp.loguniform('rmsprop_learning_rate_3', np.log(0.001), np.log(0.002))),
+				# 					scope.Nadam(
+				# 						learning_rate=hp.loguniform('nadam_learning_rate_3', np.log(0.001), np.log(0.002))),
+				# 					scope.SGD(
+				# 						learning_rate=hp.loguniform('sgd_learning_rate_3', np.log(0.001), np.log(0.002)))
+				# 					])}
+				])
 
 
-# models = {'XGBoost': xgb_space,
-# 			'CatBoost': catboost_space,
-# 			#'NeuralNet': neuralnet_space,
-# 			'HistGradientBoost': histgradboost_space,
-# 			'ExtraTrees': extratrees_space	
-# 			}
+xgb_space = {
+		'n_estimators': scope.int(hp.quniform('n_estimators', 100, 1000, 1)),
+		'eta': hp.quniform('eta', 0.025, 0.5, 0.025),
+		'max_depth':  scope.int(hp.quniform('max_depth', 2, 20, 1)),
+		'min_child_weight': scope.int(hp.quniform('min_child_weight', 1, 6, 1)),
+		'subsample': hp.quniform('subsample', 0.5, 1, 0.05),
+		'gamma': hp.quniform('gamma', 0.5, 3, 0.05),
+		'colsample_bytree': hp.quniform('colsample_bytree', 0.5, 1, 0.05),
+		'features': hp.choice('features', [numerical_features]),
+		'objective': hp.choice('objective', ['count:poisson', 'reg:squarederror'])
+		#'lambda': hp.quniform('lambda', 0, 5, 0.1),
+		#'alpha': hp.quniform('alpha', 0, 3, 0.1),
+		}
 
 
-# basic_models = {
-# 		'Dummy_mean': DummyRegressor(strategy = "mean"),
-# 		'Dummy_median': DummyRegressor(strategy = "median"),
-# 		'Poisson_reg': PoissonRegressor(max_iter = 5000),
-# 		'XGB_poisson': XGBRegressor(objective = "count:poisson"),
-# 		'XGB_mae': XGBRegressor(objective = "reg:squarederror"),
-# 		'HistGradientBoost': HistGradientBoostingRegressor(loss = "poisson"),
-# 		'ExtraTrees': ExtraTreesRegressor(),
-# 		'CatBoost_poisson':CatBoostRegressor(objective = "Poisson", verbose = 0),
-# 		'CatBoost_mae': CatBoostRegressor(objective = "MAE", verbose = 0),
-# 		'CatBoost_huber': CatBoostRegressor(objective = "Huber:delta=200", verbose = 0),
-# 		'NeuralNet_poisson': NeuralNetworkModel(n_features=len(features_more), loss='poisson'),
-# 		'NeuralNet_logcosh': NeuralNetworkModel(n_features=len(features_more), loss='logcosh')
-# 		}
+catboost_space = {
+		'learning_rate': hp.uniform('learning_rate', 0.01, 0.8),
+		#'l2_leaf_reg': hp.uniform('l2_leaf_reg', 0.0, 5.0),
+		'max_depth': scope.int(hp.quniform('max_depth', 1, 10, 1)),
+		'colsample_bylevel': hp.uniform('colsample_bylevel', 0.2, 1.0),
+		'bagging_temperature': hp.uniform('bagging_temperature', 0.0, 100),
+		'random_strength': hp.uniform('random_strength', 0.0, 100),
+		'objective': hp.choice('objective', ['Poisson', 'MAE', 'Huber:delta=200']),
+		'features': hp.choice('features', [numerical_features])
+		# 'pca_n_components': scope.int(hp.quniform('pca_n_components', 2, 30, 1))
+		}
 
-# xgb_params = {'colsample_bytree': 0.65, 'eta': 0.025, 'gamma': 2.6500000000000004, 'max_depth': 13, 'min_child_weight': 5, 'n_estimators': 670, 'objective': 'reg:squarederror', 'subsample': 0.75}
-# catboost_params = {'bagging_temperature': 73.36639664720846, 'colsample_bylevel': 0.759658158144634, 'learning_rate': 0.578364903081939, 'max_depth': 4, 'objective': 'MAE', 'random_strength': 78.90253011511733}
-# neuralnet_params = {'activations': ('hard_sigmoid', 'tanh'), 'batch_2': 494, 'loss': 'mae', 'nodes': (226, 8), 'optimizer': tf.keras.optimizers.RMSprop(learning_rate=0.002)}
-# histgradboost_params = {'learning_rate': 0.26858116728324866, 'max_leaf_nodes': 2, 'min_samples_leaf': 58}
-# extratree_params = {'max_features': 'log2', 'min_samples_leaf': 17, 'min_samples_split': 7, 'n_estimators': 329}
 
-# opt_models = {'CatBoost': CatBoostRegressor(objective=catboost_params['objective'],
-# 								learning_rate=catboost_params['learning_rate'],
-# 								#l2_leaf_reg=score1_params['l2_leaf_reg'],
-# 								max_depth=catboost_params['max_depth'],
-# 								colsample_bylevel=catboost_params['colsample_bylevel'],
-# 								bagging_temperature=catboost_params['bagging_temperature'],
-# 								random_strength=catboost_params['random_strength'],
-# 								verbose=0),
-# 			  'XGB': XGBRegressor(n_estimators=xgb_params['n_estimators'],
-# 							eta=xgb_params['eta'],
-# 							max_depth=xgb_params['max_depth'],
-# 							min_child_weight=xgb_params['min_child_weight'],
-# 							subsample=xgb_params['subsample'],
-# 							gamma=xgb_params['gamma'],
-# 							colsample_bytree=xgb_params['colsample_bytree'],
-# 							#reg_lambda=xgb_params['lambda'],
-# 							nthread=4,
-# 							booster='gbtree',
-# 							tree_method='exact'),
-# 			  'HistGradBoost': HistGradientBoostingRegressor(loss='poisson',
-# 											learning_rate=histgradboost_params['learning_rate'],
-# 											max_leaf_nodes=histgradboost_params['max_leaf_nodes'],
-# 											min_samples_leaf=histgradboost_params['min_samples_leaf']),
-# 			  'ExtraTrees': ExtraTreesRegressor(n_estimators=extratree_params['n_estimators'],
-# 											min_samples_split=extratree_params['min_samples_split'],
-# 											min_samples_leaf=extratree_params['min_samples_leaf'],
-# 											max_features=extratree_params['max_features']),
-# 			  'NeuralNet': NeuralNetworkModel(n_features=len(features_more),
-# 							optimizer=neuralnet_params['optimizer'],
-# 							#dropout=params['dropout_3'],
-# 							activations=neuralnet_params['activations'],
-# 							nodes=neuralnet_params['nodes'],
-# 							loss=neuralnet_params['loss'],
-# 							metrics=['mse', 'mae'])}
+extratrees_space = {
+		'n_estimators': scope.int(hp.quniform('n_estimators', 100, 1000, 1)),
+		'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
+		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 20, 1)),
+		'max_features': hp.choice('max_features', ['auto', 'sqrt', 'log2']),
+		'features': hp.choice('features', [numerical_features])
+		}
+
+
+histgradboost_space = {
+		'learning_rate': hp.uniform('learning_rate', 0.01, 0.8),
+		'max_leaf_nodes': scope.int(hp.quniform('max_leaf_nodes', 2, 60, 1)),
+		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 60, 1)),
+		'features': hp.choice('features', [numerical_features])
+		}
+
+
+models = {#'XGBoost': xgb_space,
+			#'CatBoost': catboost_space,
+			'NeuralNet': neuralnet_space,
+			# 'HistGradientBoost': histgradboost_space,
+			# 'ExtraTrees': extratrees_space	
+			}
+
+
+basic_models = {
+		'Dummy_mean': DummyRegressor(strategy = "mean"),
+		'Dummy_median': DummyRegressor(strategy = "median"),
+		'Poisson_reg': PoissonRegressor(max_iter = 5000),
+		'XGB_poisson': XGBRegressor(objective = "count:poisson"),
+		'XGB_mae': XGBRegressor(objective = "reg:squarederror"),
+		'HistGradientBoost': HistGradientBoostingRegressor(loss = "poisson"),
+		'ExtraTrees': ExtraTreesRegressor(),
+		'CatBoost_poisson':CatBoostRegressor(objective = "Poisson", verbose = 0),
+		'CatBoost_mae': CatBoostRegressor(objective = "MAE", verbose = 0),
+		'CatBoost_huber': CatBoostRegressor(objective = "Huber:delta=200", verbose = 0),
+		'NeuralNet_poisson': NeuralNetworkModel(n_features=len(numerical_features), loss='poisson'),
+		'NeuralNet_logcosh': NeuralNetworkModel(n_features=len(numerical_features), loss='logcosh')
+		}
+
+xgb_params = {'colsample_bytree': 0.65, 'eta': 0.025, 'gamma': 2.0, 'max_depth': 5, 'min_child_weight': 5, 'n_estimators': 369, 'objective': 'count:poisson', 'subsample': 0.55}
+catboost_params = {'bagging_temperature': 38.60699731859418, 'colsample_bylevel': 0.4704765819755566, 'learning_rate': 0.6525042510075264, 'max_depth': 4, 'objective': 'MAE', 'random_strength': 0.406932935664436}
+neuralnet_params =  {'activations': ('sigmoid', 'sigmoid'), 'batch_2': 34, 'loss': 'mae', 'nodes': (2, 124), 'num_layers': 2, 'optimizer': tf.keras.optimizers.Nadam(learning_rate=0.0034)}
+histgradboost_params = {'learning_rate': 0.052704998727605964, 'max_leaf_nodes': 3, 'min_samples_leaf': 35}
+extratree_params = {'max_features': 'sqrt', 'min_samples_leaf': 17, 'min_samples_split': 2, 'n_estimators': 370}
+
+opt_models = {'CatBoost': CatBoostRegressor(objective=catboost_params['objective'],
+								learning_rate=catboost_params['learning_rate'],
+								#l2_leaf_reg=score1_params['l2_leaf_reg'],
+								max_depth=catboost_params['max_depth'],
+								colsample_bylevel=catboost_params['colsample_bylevel'],
+								bagging_temperature=catboost_params['bagging_temperature'],
+								random_strength=catboost_params['random_strength'],
+								verbose=0),
+			  'XGB': XGBRegressor(n_estimators=xgb_params['n_estimators'],
+							eta=xgb_params['eta'],
+							max_depth=xgb_params['max_depth'],
+							min_child_weight=xgb_params['min_child_weight'],
+							subsample=xgb_params['subsample'],
+							gamma=xgb_params['gamma'],
+							colsample_bytree=xgb_params['colsample_bytree'],
+							#reg_lambda=xgb_params['lambda'],
+							nthread=4,
+							booster='gbtree',
+							tree_method='exact'),
+			  'HistGradBoost': HistGradientBoostingRegressor(loss='poisson',
+											learning_rate=histgradboost_params['learning_rate'],
+											max_leaf_nodes=histgradboost_params['max_leaf_nodes'],
+											min_samples_leaf=histgradboost_params['min_samples_leaf']),
+			  'ExtraTrees': ExtraTreesRegressor(n_estimators=extratree_params['n_estimators'],
+											min_samples_split=extratree_params['min_samples_split'],
+											min_samples_leaf=extratree_params['min_samples_leaf'],
+											max_features=extratree_params['max_features']),
+			  'NeuralNet': NeuralNetworkModel(n_features=len(numerical_features) ,
+							optimizer=neuralnet_params['optimizer'],
+							#dropout=params['dropout_3'],
+							activations=neuralnet_params['activations'],
+							nodes=neuralnet_params['nodes'],
+							loss=neuralnet_params['loss'],
+							metrics=['mse', 'mae'])}
 
 
 # res_dict = {}
 # for model_name, model in basic_models.items():
-# 	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over = evaluate(model, model_name, features=features_more, df_train=df_train_transformed, target=target_train_transformed, 
+# 	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over = evaluate(model, model_name, features=numerical_features, df_train=df_train_transformed, target=target_train_transformed, 
 # 																							df_test=df_test_transformed, cv=4)
 # 	res_dict[model_name] = [mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over]
 
@@ -526,7 +708,7 @@ print(transformer.transformations_)
 
 # res_dict = {}
 # for model_name, model in opt_models.items():
-# 	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over = evaluate(model, model_name, features=features_more, df_train=df_train_transformed, target=target_train_transformed, 
+# 	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over = evaluate(model, model_name, features=numerical_features, df_train=df_train_transformed, target=target_train_transformed, 
 # 																							df_test=df_test_transformed, cv=4)
 # 	res_dict[model_name] = [mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over]
 
@@ -534,37 +716,40 @@ print(transformer.transformations_)
 # print(results_df.sort_values(by='MAE_test'))
 
 
-# res_dict = {}
-# for model, space in models.items():
-# 	print(model)
-# 	opt_f = partial(optimize, name=model, df_train=df_train_transformed, df_target=target_train_transformed)
-# 	trials = Trials()
-# 	best = fmin(fn=opt_f,
-# 	            space=space,
-# 	            algo=tpe.suggest,
-# 	            max_evals=100,
-# 	            trials=trials)
+res_dict = {}
+for model, space in models.items():
+	print(model)
+	opt_f = partial(optimize, name=model, df_train=df_train_transformed, df_target=target_train_transformed)
+	trials = Trials()
+	best = fmin(fn=opt_f,
+	            space=space,
+	            algo=tpe.suggest,
+	            max_evals=70,
+	            trials=trials)
 
-# 	best_params = trials.results[np.argmin([r['loss'] for r in trials.results])]['params']
-# 	print(f'Best model params: {best_params}')
-# 	best_loss = trials.results[np.argmin([r['loss'] for r in trials.results])]['loss']
-# 	print(f'Best avg loss (p_dev): {best_loss}')
-# 	best_pdev = trials.results[np.argmin([r['loss'] for r in trials.results])]['pdev']
-# 	print(f'Best avg Poisson deviance: {best_pdev}')
-# 	best_rmse = trials.results[np.argmin([r['loss'] for r in trials.results])]['rmse']
-# 	print(f'Best avg RMSE: {best_rmse}')
-# 	best_mae = trials.results[np.argmin([r['loss'] for r in trials.results])]['mae']
-# 	print(f'Best mae: {best_mae}')
-# 	best_model = trials.results[np.argmin([r['loss'] for r in trials.results])]['model']
-# 	if model == 'NeuralNet':
-# 		print(f'Best learning rate" {best_model.model.optimizer.lr.numpy()}')
+	best_params = trials.results[np.argmin([r['loss'] for r in trials.results])]['params']
+	print(f'Best model params: {best_params}')
+	best_loss = trials.results[np.argmin([r['loss'] for r in trials.results])]['loss']
+	print(f'Best avg loss (p_dev): {best_loss}')
+	best_pdev = trials.results[np.argmin([r['loss'] for r in trials.results])]['pdev']
+	print(f'Best avg Poisson deviance: {best_pdev}')
+	best_rmse = trials.results[np.argmin([r['loss'] for r in trials.results])]['rmse']
+	print(f'Best avg RMSE: {best_rmse}')
+	best_mae = trials.results[np.argmin([r['loss'] for r in trials.results])]['mae']
+	print(f'Best mae: {best_mae}')
+	best_model = trials.results[np.argmin([r['loss'] for r in trials.results])]['model']
+	if model == 'NeuralNet':
+		print(f'Best learning rate" {best_model.model.optimizer.lr.numpy()}')
 
-# 	res_dict[model] = [best_loss, best_pdev, best_rmse, best_mae]
+	res_dict[model] = [best_loss, best_pdev, best_rmse, best_mae]
 
-# results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['loss', 'P DEVIANCE', 'RMSE', 'MAE'])
-# print(results_df.sort_values(by='MAE'))
+results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['loss', 'P DEVIANCE', 'RMSE', 'MAE'])
+print(results_df.sort_values(by='MAE'))
+
+
 
 '''
+ORIGINAL FEATURES
 'XGBoost':
 Best model params: {'colsample_bytree': 0.65, 'eta': 0.025, 'features': ('spi1', 'importance1', 'shots1_home', 'shots2_home', 'shotsot1_home', 'shotsot2_home', 'fouls1_home', 'corners1_home', 'corners2_home', 'adj_avg_xg1_home', 'adj_avg_xg2_home', 'xwin1_home', 'xwin2_home', 'xpts1_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'shots2_away', 'shotsot2_away', 'corners2_away', 'adj_avg_xg1_away', 'adj_avg_xg2_away', 'xwin1_away', 'xwin2_away', 'xpts1_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar'), 'gamma': 2.6500000000000004, 'max_depth': 13, 'min_child_weight': 5, 'n_estimators': 670, 'objective': 'reg:squarederror', 'subsample': 0.75}
 Best avg loss (p_dev): 0.8857372665987864
@@ -594,7 +779,6 @@ Best avg Poisson deviance: 1.128144880326153
 Best avg RMSE: 1.1551126809530212
 Best mae: 0.8867445418155004
 
-
 'ExtraTrees': extratrees_space	
 Best model params: {'features': ('spi1', 'importance1', 'shots1_home', 'shots2_home', 'shotsot1_home', 'shotsot2_home', 'fouls1_home', 'corners1_home', 'corners2_home', 'adj_avg_xg1_home', 'adj_avg_xg2_home', 'xwin1_home', 'xwin2_home', 'xpts1_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'shots2_away', 'shotsot2_away', 'corners2_away', 'adj_avg_xg1_away', 'adj_avg_xg2_away', 'xwin1_away', 'xwin2_away', 'xpts1_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar'), 'max_features': 'log2', 'min_samples_leaf': 17, 'min_samples_split': 7, 'n_estimators': 329}
 Best avg loss (p_dev): 0.8862885947978122
@@ -602,4 +786,81 @@ Best avg Poisson deviance: 1.1248651725025214
 Best avg RMSE: 1.1537186237800534
 Best mae: 0.8862885947978122
 
+
+TRANSFORMED FEATURES
+XGBoost
+Best model params: {'colsample_bytree': 0.65, 'eta': 0.025, 'gamma': 2.0, 'max_depth': 5, 'min_child_weight': 5, 'n_estimators': 369, 'objective': 'count:poisson', 'subsample': 0.55}
+Best avg loss (p_dev): 0.8856632173764443
+Best avg Poisson deviance: 1.1347940820035611
+Best avg RMSE: 1.159466205778177
+Best mae: 0.8856632173764443
+
+CatBoost
+Best model params: {'bagging_temperature': 38.60699731859418, 'colsample_bylevel': 0.4704765819755566, 'learning_rate': 0.6525042510075264, 'max_depth': 4, 'objective': 'MAE', 'random_strength': 0.406932935664436}
+Best avg loss (p_dev): 0.8681246257137939
+Best avg Poisson deviance: 1.207159076890926
+Best avg RMSE: 1.1893972660362264
+Best mae: 0.8681246257137939
+
+NeuralNet
+Best model params: {'activations': ('sigmoid', 'sigmoid'), 'batch_2': 34, 'loss': 'mae', 'nodes': (2, 124), 'num_layers': 2, 'optimizer': tf.keras.optimizers.Nadam(learning_rate=0.0034)}
+Best avg loss (p_dev): 0.8598217433878172
+Best avg Poisson deviance: 1.172002163409827
+Best avg RMSE: 1.1765647613419339
+Best mae: 0.8598217433878172
+Best learning rate" 0.003473945427685976
+
+HistGradientBoost
+Best model params: {'features': ('spi1', 'importance1', 'shots1_home', 'shots2_home', 'shotsot1_home', 'shotsot2_home', 'fouls1_home', 'corners1_home', 'corners2_home', 'adj_avg_xg1_home', 'adj_avg_xg2_home', 'xwin1_home', 'xwin2_home', 'xpts1_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'shots2_away', 'shotsot2_away', 'corners2_away', 'adj_avg_xg1_away', 'adj_avg_xg2_away', 'xwin1_away', 'xwin2_away', 'xpts1_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar'), 'learning_rate': 0.09985685005802489, 'max_leaf_nodes': 9, 'min_samples_leaf': 47}
+Best avg loss (p_dev): 0.8863538480424444
+Best avg Poisson deviance: 1.1277401297883107
+Best avg RMSE: 1.1550811818612416
+Best mae: 0.8863538480424444
+
+ExtraTrees
+Best model params: {'features': ('spi1', 'importance1', 'shots1_home', 'shots2_home', 'shotsot1_home', 'shotsot2_home', 'fouls1_home', 'corners1_home', 'corners2_home', 'adj_avg_xg1_home', 'adj_avg_xg2_home', 'xwin1_home', 'xwin2_home', 'xpts1_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'shots2_away', 'shotsot2_away', 'corners2_away', 'adj_avg_xg1_away', 'adj_avg_xg2_away', 'xwin1_away', 'xwin2_away', 'xpts1_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar'), 'max_features': 'log2', 'min_samples_leaf': 13, 'min_samples_split': 3, 'n_estimators': 710}
+Best avg loss (p_dev): 0.8863265413223897
+Best avg Poisson deviance: 1.125320006656704
+Best avg RMSE: 1.1541681299569846
+Best mae: 0.8863265413223897
+
+
+NEW FEATURES
+XGBoost
+Best model params: {'colsample_bytree': 0.6000000000000001, 'eta': 0.07500000000000001, 'gamma': 2.2, 'max_depth': 4, 'min_child_weight': 5, 'n_estimators': 404, 'objective': 'reg:squarederror', 'subsample': 0.6000000000000001}
+Best avg loss (p_dev): 0.8868844388003464
+Best avg Poisson deviance: 1.1388676107401992
+Best avg RMSE: 1.1620790304786401
+Best mae: 0.8868844388003464
+
+CatBoost
+Best model params: {'bagging_temperature': 73.96689253475063, 'colsample_bylevel': 0.650904987501171, 'learning_rate': 0.4799455434901775, 'max_depth': 5, 'objective': 'MAE', 'random_strength': 97.66901700690043}
+Best avg loss (p_dev): 0.8683945581876658
+Best avg Poisson deviance: 1.1881667894212073
+Best avg RMSE: 1.1859533780036966
+Best mae: 0.8683945581876658
+
+NeuralNet
+Best model params: {'activations': ('tanh', 'sigmoid'), 'batch_2': 32,  'loss': 'mae', 'nodes': (2, 32), 'num_layers': 2, 'optimizer': tf.keras.optimizers.Nadam(learning_rate=0.0014307)}
+Best avg loss (p_dev): 0.860664402225354
+Best avg Poisson deviance: 1.1914421537719688
+Best avg RMSE: 1.1829955541448682
+Best mae: 0.860664402225354
+Best learning rate" 0.001430730102583766
+
+
+NEW TRANSFORMED FEATURES
+XGBoost
+Best model params: {'colsample_bytree': 0.8, 'eta': 0.1, 'features': ('fouls1_home', 'xwin1_home', 'xwin2_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'xwin1_away', 'xwin2_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar', 'spi_diff', 'importance_diff', 'adj_avg_xg1_diff', 'adj_avg_xg2_diff', 'adj_avg_xg_diff_home', 'adj_avg_xg_diff_away', 'shotsot_diff_home', 'shotsot_diff_away', 'corners1_diff', 'corners2_diff', 'xpts1_diff'), 'gamma': 2.9000000000000004, 'max_depth': 5, 'min_child_weight': 3, 'n_estimators': 414, 'objective': 'reg:squarederror', 'subsample': 0.75}
+Best avg loss (p_dev): 0.8874436882343177
+Best avg Poisson deviance: 1.1464362345885812
+Best avg RMSE: 1.1677040073531215
+Best mae: 0.8874436882343177
+
+CatBoost
+Best model params: {'bagging_temperature': 11.672466450173395, 'colsample_bylevel': 0.9978671982115682, 'features': ('fouls1_home', 'xwin1_home', 'xwin2_home', 'xpts2_home', 'xgshot1_home', 'convrate1_home', 'xwin1_away', 'xwin2_away', 'xpts2_away', 'home', 'xg1_league', 'xg2_league', 'A', 'H', 'score1_similar', 'score2_similar', 'spi_diff', 'importance_diff', 'adj_avg_xg1_diff', 'adj_avg_xg2_diff', 'adj_avg_xg_diff_home', 'adj_avg_xg_diff_away', 'shotsot_diff_home', 'shotsot_diff_away', 'corners1_diff', 'corners2_diff', 'xpts1_diff'), 'learning_rate': 0.5771574496531257, 'max_depth': 4, 'objective': 'MAE', 'random_strength': 0.2868833772281496}
+Best avg loss (p_dev): 0.8696924501857564
+Best avg Poisson deviance: 1.1907762955899874
+Best avg RMSE: 1.1887779885971888
+Best mae: 0.8696924501857564
 '''

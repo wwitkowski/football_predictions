@@ -279,6 +279,18 @@ class FootballStats:
 		self.data['cards1'] = self.data['yellow1'] + 2 * self.data['red1']
 		self.data['cards2'] = self.data['yellow2'] + 2 * self.data['red2']
 
+		self.data['datetime'] = pd.to_datetime(self.data['date'])
+
+		data_temp = pd.concat([self.data[['season', 'datetime', 'league', 'team1']], 
+			self.data[['season', 'datetime', 'league', 'team2']].rename(columns={'team2': 'team1'})]).sort_values(by=['season', 'datetime'])
+
+		data_temp['matchday'] = data_temp.groupby(['season', 'league', 'team1'])['datetime'].rank(method='first')
+		data_temp.to_csv('rank.csv')
+		self.data = self.data.merge(data_temp, left_on=['datetime', 'league',  'team1'],  right_on=['datetime', 'league',  'team1'], how='left', suffixes=('', '_home'))
+		self.data = self.data.merge(data_temp, left_on=['datetime', 'league',  'team2'],  right_on=['datetime', 'league',  'team1'], how='left', suffixes=('', '_away'))
+		self.data.drop(['datetime', 'season_home', 'season_away', 'team1_away'], axis=1, inplace=True)
+
+
 
 	def __enter__(self):
 		try:
@@ -384,6 +396,7 @@ class TeamStats:
 						 			 columns=rename_away_stats_dict)], ignore_index=True, sort=False)
 
 		weighted_stats = teams_past_data.select_dtypes(include=['float64']).columns.values
+
 
 		avg_weight_stats = avg_weight_stats.groupby(['team1']).apply(lambda x: pd.Series(np.average(x[weighted_stats], weights=x.weight, axis=0), weighted_stats))
 
