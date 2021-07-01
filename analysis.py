@@ -28,7 +28,7 @@ class FeatureTransformer:
 		skew_sqrt = (3 * (sqrt.mean() - sqrt.median())) / sqrt.std()
 		skew_sqrt = skew_sqrt.rename('sqrt')
 
-		skews = pd.concat([skews_original, skews_log, skew_sqrt], axis=1)
+		skews = pd.concat([skews_original, skews_log, skew_sqrt], sort=False, axis=1)
 		self.transformations_ = skews.idxmin(axis=1).to_dict()
 
 

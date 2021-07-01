@@ -19,10 +19,11 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.cluster import KMeans
+from sklearn.feature_selection import SelectKBest, f_regression
 
 from models import NeuralNetworkModel, FootballPoissonModel
 
-### Data creation
+# ## Data creation
 # DATE = datetime.now().strftime('%Y-%m-%d')
 # EXCLUDE_FEATURES = ['prob1', 'prob2', 'probtie', 
 # 					'proj_score1', 'proj_score2',
@@ -75,6 +76,7 @@ df_train['importance_diff_away'] = df_train['importance2'] - df_train['importanc
 
 other_columns = ['team1', 'team2', 'spi1', 'spi2', 'importance1', 'importance2', 'score1', 'score2',
 				'score1_similar', 'score2_similar', 'xg1_similar', 'xg2_similar',
+				'global_score1_avg', 'global_score2_avg', 'global_xg1_avg', 'global_xg2_avg',
 				'score1_league', 'score2_league', 'xg1_league', 'xg2_league', 'A', 'H']
 
 home_stats_cols = [col for col in df_train.columns.values if 'home' in col]
@@ -128,8 +130,8 @@ train_target = df_train[['score1']]
 # 			'score1_similar','score2_similar','xg1_similar','xg2_similar']
 
 numerical_features = [
-			#'spi1','importance1',
-			#'shots1_home','shots2_home','shotsot1_home','shotsot2_home', 
+			# 'spi1','importance1',
+			# 'shots1_home','shots2_home','shotsot1_home','shotsot2_home', 
 			'fouls1_home',
 			#'corners1_home','corners2_home','adj_avg_xg1_home','adj_avg_xg2_home',
 			'xwin1_home','xwin2_home',
@@ -159,8 +161,47 @@ numerical_features = [
 			# # 'convrate1_diff'
 			]
 
+numerical_features = [
+			# 'spi1','importance1',
+			# 'shots1_home','shots2_home','shotsot1_home','shotsot2_home', 
+			# 'fouls1_home',
+			# 'corners1_home','corners2_home',
+			'adj_avg_xg1_home',
+			# 'adj_avg_xg2_home',
+			# 'xwin1_home','xwin2_home',
+			# 'xpts1_home',
+			# 'xpts2_home',
+			# 'xgshot1_home','convrate1_home',
+			# 'shots2_away','shotsot2_away', 
+			# 'corners2_away', 'adj_avg_xg1_away',
+			'adj_avg_xg2_away',
+			# 'xwin1_away','xwin2_away',
+			# 'xpts1_away',
+			# 'xpts2_away',
+			# 'xg1_league','xg2_league',
+			# 'A','H',
+			'score1_similar',
+			# 'score2_similar',
+			# 'spi_diff',  
+			'importance_diff', 
+			# 'adj_avg_xg1_diff', 
+			# 'adj_avg_xg2_diff',
+			# 'adj_avg_xg_diff_home',
+			# 'adj_avg_xg_diff_away',
+			'shotsot1_diff',
+			'shotsot2_diff',
+			# 'shotsot_diff_home',
+			# 'shotsot_diff_away',
+			'corners1_diff',
+			'corners2_diff',
+			# 'xpts1_diff',
+			# 'xgshot1_diff',
+			# 'convrate1_diff',
+			#'global_score1_avg', 'global_score2_avg', 'global_xg1_avg', 'global_xg2_avg',
+			]
 
-categorical_features = ['home',
+categorical_features = [
+			# 'home',
 			'month_1',
 			'month_2',
 			'month_3',
@@ -172,10 +213,11 @@ categorical_features = ['home',
 			'month_10',
 			'month_11',
 			'month_12',
-			'matchday_<10', 'matchday_11-20', 'matchday_21-30', 'matchday_31-40', 'matchday_41-50',
-			'cluster_0', 'cluster_1', 'cluster_2', 'cluster_3',
-			'league_1843.0', 'league_1845.0', 'league_1846.0', 'league_1854.0', 'league_1856.0',
-			'league_1864.0', 'league_1869.0', 'league_2411.0', 'league_2412.0']
+			# 'matchday_<10', 'matchday_11-20', 'matchday_21-30', 'matchday_31-40', 'matchday_41-50',
+			# 'cluster_0', 'cluster_1', 'cluster_2', 'cluster_3',
+			# 'league_1843.0', 'league_1845.0', 'league_1846.0', 'league_1854.0', 'league_1856.0',
+			# 'league_1864.0', 'league_1869.0', 'league_2411.0', 'league_2412.0'
+			]
 
 #df_train = df_train[features]
 
@@ -223,6 +265,53 @@ kmeans = KMeans(n_clusters=4, **kmeans_kwargs)
 kmeans.fit(train_scaled)
 df_train['cluster'] = kmeans.labels_
 one_hot = pd.get_dummies(df_train['cluster'], prefix='cluster')
+
+
+df_train['score1_cluster_home'] = np.where(
+    		((df_train['cluster'] == 0) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 0) & (df_train['home'] == 0))].score1.mean(), np.where(
+	    		((df_train['cluster'] == 0) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 0) & (df_train['home'] == 1))].score1.mean(), np.where(
+	    			((df_train['cluster'] == 1) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 1) & (df_train['home'] == 0))].score1.mean(), np.where(
+	    				((df_train['cluster'] == 1) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 1) & (df_train['home'] == 1))].score1.mean(), np.where(
+	    					((df_train['cluster'] == 2) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 2) & (df_train['home'] == 0))].score1.mean(), np.where(
+	    						((df_train['cluster'] == 2) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 2) & (df_train['home'] == 1))].score1.mean(), np.where(
+	    							((df_train['cluster'] == 3) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 3) & (df_train['home'] == 0))].score1.mean(), np.where(
+	    								((df_train['cluster'] == 3) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 3) & (df_train['home'] == 1))].score1.mean(), 0))))))))
+
+df_train['score2_cluster_home'] = np.where(
+    		((df_train['cluster'] == 0) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 0) & (df_train['home'] == 0))].score2.mean(), np.where(
+	    		((df_train['cluster'] == 0) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 0) & (df_train['home'] == 1))].score2.mean(), np.where(
+	    			((df_train['cluster'] == 1) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 1) & (df_train['home'] == 0))].score2.mean(), np.where(
+	    				((df_train['cluster'] == 1) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 1) & (df_train['home'] == 1))].score2.mean(), np.where(
+	    					((df_train['cluster'] == 2) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 2) & (df_train['home'] == 0))].score2.mean(), np.where(
+	    						((df_train['cluster'] == 2) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 2) & (df_train['home'] == 1))].score2.mean(), np.where(
+	    							((df_train['cluster'] == 3) & (df_train['home'] == 0)), df_train[((df_train['cluster'] == 3) & (df_train['home'] == 0))].score2.mean(), np.where(
+	    								((df_train['cluster'] == 3) & (df_train['home'] == 1)), df_train[((df_train['cluster'] == 3) & (df_train['home'] == 1))].score2.mean(), 0))))))))
+
+df_train['score1_cluster'] = np.where(
+	    		((df_train['cluster'] == 0) ), df_train[((df_train['cluster'] == 0) )].score1.mean(), np.where(
+	    				((df_train['cluster'] == 1) ), df_train[((df_train['cluster'] == 1) )].score1.mean(), np.where(
+	    						((df_train['cluster'] == 2) ), df_train[((df_train['cluster'] == 2))].score1.mean(), np.where(
+	    								((df_train['cluster'] == 3) ), df_train[((df_train['cluster'] == 3) )].score1.mean(), 0))))
+
+df_train['score2_cluster'] = np.where(
+	    		((df_train['cluster'] == 0) ), df_train[((df_train['cluster'] == 0) )].score2.mean(), np.where(
+	    				((df_train['cluster'] == 1) ), df_train[((df_train['cluster'] == 1) )].score2.mean(), np.where(
+	    						((df_train['cluster'] == 2) ), df_train[((df_train['cluster'] == 2) )].score2.mean(), np.where(
+	    								((df_train['cluster'] == 3) ), df_train[((df_train['cluster'] == 3) )].score2.mean(), 0))))
+
+#df_train.to_csv('cluster.csv')
+
+print(df_train['score1_cluster'])
+goals_by_cluster = df_train[['cluster', 'home', 'score1']].groupby(['cluster', 'home']).mean()
+print(goals_by_cluster.shape)
+plt.bar(np.arange(goals_by_cluster.shape[0]/2)-0.2, goals_by_cluster.iloc[goals_by_cluster.index.get_level_values('home') == 1].score1, width=0.4, color='c')
+plt.bar(np.arange(goals_by_cluster.shape[0]/2)+0.2, goals_by_cluster.iloc[goals_by_cluster.index.get_level_values('home') == 0].score1, width=0.4, color='m')
+plt.xticks(np.arange(goals_by_cluster.shape[0]/2), ['cluster 0', 'cluster 1', 'cluster 2', 'cluster 3'], rotation=45, ha='right')
+plt.xlabel('Cluster')
+plt.ylabel('Goals')
+plt.title('Average goals scored per cluster')
+plt.show()
+
 df_train = df_train.drop('cluster',axis = 1)
 df_train = df_train.join(one_hot)
 
@@ -231,6 +320,10 @@ df_train = df_train.drop('league_id',axis = 1)
 df_train = df_train.join(one_hot)
 
 one_hot = pd.get_dummies(df_train['matchday_binned'], prefix='matchday')
+goals_by_cluster = df_train[['matchday_binned', 'home', 'score1']].groupby(['matchday_binned', 'home']).mean()
+print(goals_by_cluster)
+
+
 df_train = df_train.drop('matchday_binned',axis = 1)
 df_train = df_train.join(one_hot)
 
@@ -239,7 +332,10 @@ df_train = df_train.drop('month',axis = 1)
 df_train = df_train.join(one_hot)
 
 df_train_num = df_train[numerical_features]
-df_train_cat = df_train[categorical_features + ['score1']]
+#df_train_cat = df_train[categorical_features + ['score1'']]
+
+
+
 
 ### Boxplot - outliers
 # for column in df_train_num:
@@ -255,9 +351,9 @@ df_train_cat = df_train[categorical_features + ['score1']]
 
 
 ### Correlation
-# df_corr = df_train_num.corr()
-# sns.heatmap(df_corr, annot=True, cmap="YlGnBu")
-# plt.show()
+df_corr = df_train_num.corr()
+sns.heatmap(df_corr, annot=True, cmap="YlGnBu")
+plt.show()
 
 
 # # ### Pairplot
@@ -265,15 +361,27 @@ df_train_cat = df_train[categorical_features + ['score1']]
 # # # plt.show()
 
 
-# ### Feature variance
-# df_variance = df_train_num.var()
-# plt.bar(np.arange(df_variance.shape[0]), df_variance, log=True)
-# plt.xticks(np.arange(df_variance.shape[0]), df_train_num.columns.values, rotation=45, ha='right')
-# plt.ylabel('Variance')
-# plt.title('Feature variance')
-# plt.show()
+### Feature variance
+df_variance = df_train_num.var()
+plt.bar(np.arange(df_variance.shape[0]), df_variance, log=True)
+plt.xticks(np.arange(df_variance.shape[0]), df_train_num.columns.values, rotation=45, ha='right')
+plt.ylabel('Variance')
+plt.title('Feature variance')
+plt.show()
 
-# ### Score1 Spearman and Kendall correlation
+
+fvalue_selector = SelectKBest(f_regression, k='all')
+X_train_new = fvalue_selector.fit_transform(df_train_num, train_target)
+mask = fvalue_selector.get_support()
+
+print(fvalue_selector.scores_)
+print(df_train_num.columns[mask])
+
+plt.bar(np.arange(len(fvalue_selector.scores_)), fvalue_selector.scores_)
+plt.xticks(np.arange(len(df_train_num.columns.values)), df_train_num.columns.values, rotation=45, ha='right')
+plt.show()
+
+### Score1 Spearman and Kendall correlation
 # kt_corr = [kendalltau(df_train_num[column], train_target) for column in df_train_num.columns]
 # sp_corr = [spearmanr(df_train_num[column], train_target) for column in df_train_num.columns]
 

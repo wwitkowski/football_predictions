@@ -353,6 +353,7 @@ class TeamStats:
 		past_data.dropna(subset=['score1', 'score2', 'xg1', 'xg2', 'nsxg1', 'nsxg2', 'HomeTeam', 'AwayTeam', 'shots1', 'shots2'], inplace=True)
 
 		league_avgs = past_data[['league_id', 'xg1', 'xg2', 'score1', 'score2']].groupby(['league_id']).mean()
+
 		
 		# Take matchday teams data that is not used for calculating stats
 		today_data = df[df.date == date]
@@ -415,6 +416,12 @@ class TeamStats:
 							  												ignore_index=True)
 
 		avg_luck = avg_luck.groupby(['team1']).mean()
+
+		home_away_avgs = past_data[['xg1', 'xg2', 'score1', 'score2']].mean()
+		today_data['global_score1_avg'] = home_away_avgs.score1
+		today_data['global_score2_avg'] = home_away_avgs.score2
+		today_data['global_xg1_avg'] = home_away_avgs.xg1
+		today_data['global_xg2_avg'] = home_away_avgs.xg2
 
 		today_data = today_data.merge(avg_weight_stats, left_on='team1', right_index=True, how='inner', suffixes=('', '_home'))
 		today_data = today_data.merge(avg_weight_stats, left_on='team2', right_index=True, how='inner', suffixes=('', '_away'))

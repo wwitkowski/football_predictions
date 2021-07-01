@@ -59,8 +59,9 @@ class FootballPoissonModel():
 class NeuralNetworkModel():
 
 
-	def __init__(self, n_features, name=None, activations=('relu', 'relu'), nodes=(50, 50), dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
+	def __init__(self, n_features, name=None, activations=('relu', 'relu'), nodes=(50, 50), batch_size=256, dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		self.name = name
+		self.batch_size = batch_size
 
 		if self.name is not None:
 			self.model = tf.keras.models.load_model(f'models\\{self.name}.hdf5')
@@ -97,7 +98,7 @@ class NeuralNetworkModel():
 			metrics=metrics)
 
 
-	def fit(self, X_train, y_train, X_val, y_val, verbose=1, batch_size=256, epochs=200):
+	def fit(self, X_train, y_train, X_val, y_val, verbose=1, epochs=200):
 
 		checkpoint = tf.keras.callbacks.ModelCheckpoint(f"models\\nn_model.hdf5",
 														 monitor='val_loss',
@@ -106,7 +107,7 @@ class NeuralNetworkModel():
 		early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=50, restore_best_weights=True, verbose=0)
 
 		self.history = self.model.fit(X_train, y_train,
-									  batch_size=batch_size,
+									  batch_size=self.batch_size,
 									  verbose=verbose,
 									  epochs=epochs,
 									  callbacks=[early_stopping],
