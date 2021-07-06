@@ -443,36 +443,37 @@ class Bookmaker():
 
 	def _bet(self, row):
 		if self.odds == 'max':
-			if row.MaxH > 1/row.homewin_pred:
-				if row.MaxD > 1/row.draw_pred:
+			if row.MaxH - 1/row.homewin_pred > 0:
+				if row.MaxD - 1/row.draw_pred > 0:
 					return 'HD'
-				elif row.MaxA > 1/row.awaywin_pred:
+				elif row.MaxA - 1/row.awaywin_pred > 0:
 					return 'HA'
 				else:
 					return 'H'
-			elif row.MaxA > 1/row.homewin_pred:
-				if row.MaxD > 1/row.draw_pred:
+			elif row.MaxA - 1/row.awaywin_pred > 0:
+				if row.MaxD - 1/row.draw_pred > 0:
 					return 'AD'
 				else:
 					return 'A'
-			elif row.MaxD > 1/row.draw_pred:
+			elif row.MaxD - 1/row.draw_pred > 0:
 				return 'D'
 			else:
 				return 'X'
+
 		if self.odds == 'avg':
-			if row.AvgH > 1/row.homewin_pred:
-				if row.AvgD > 1/row.draw_pred:
+			if row.AvgH - 1/row.homewin_pred > 0:
+				if row.AvgD - 1/row.draw_pred > 0:
 					return 'HD'
-				elif row.AvgA > 1/row.awaywin_pred:
+				elif row.AvgA - 1/row.awaywin_pred > 0:
 					return 'HA'
 				else:
 					return 'H'
-			elif row.AvgA > 1/row.homewin_pred:
-				if row.AvgD > 1/row.draw_pred:
+			elif row.AvgA - 1/row.awaywin_pred > 0:
+				if row.AvgD - 1/row.draw_pred > 0:
 					return 'AD'
 				else:
 					return 'A'
-			elif row.AvgD > 1/row.draw_pred:
+			elif row.AvgD - 1/row.draw_pred > 0:
 				return 'D'
 			else:
 				return 'X'
@@ -576,9 +577,4 @@ class Bookmaker():
 		self.data['BET_OVER_UNDER'] = self.data.apply(lambda row: self._bet_over(row), axis=1)
 		self.data['prediction_odds_over'] = self.data.apply(lambda row: self._prediction_odds_over(row), axis=1)
 		self.data['bet_return_over'] = self.data.apply(lambda row: self._return_over(row), axis=1)
-
-
-
-
-
 

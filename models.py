@@ -55,11 +55,12 @@ class FootballPoissonModel():
 
 		res = [[np.sum(np.triu(np.fliplr(match_pred[i]), -7)), np.sum(np.tril(np.fliplr(match_pred[i]), -8))] for i in range(0, len(match_pred))]
 		return zip(*res)
+		
 
 class NeuralNetworkModel():
 
 
-	def __init__(self, n_features, name=None, activations=('relu', 'relu'), nodes=(50, 50), batch_size=256, dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
+	def __init__(self, n_features=None, name=None, activations=('relu', 'relu'), nodes=(50, 50), batch_size=256, dropout=None, optimizer='adam', loss='mse', metrics=['mse'], bias=None):
 		self.name = name
 		self.batch_size = batch_size
 
@@ -117,15 +118,14 @@ class NeuralNetworkModel():
 
 
 	def predict(self, X):
-
 		y_pred = self.model.predict(X)
 
 		return y_pred
 
 
-	def save(self, path):
+	def save_model(self, path):
+		self.model.save(f'{path}.hdf5')
 
-		self.model.save(path)
 
 	@property
 	def summary(self):

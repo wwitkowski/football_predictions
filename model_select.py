@@ -33,17 +33,20 @@ pd.set_option('mode.chained_assignment', None)
 
 def huber_loss(y_true, y_pred):
 	h = tf.keras.losses.Huber()
-
 	return h(y_true, y_pred).numpy()
 
 
 def logcosh_loss(y_true, y_pred):
-	l = tf.keras.losses.LogCosh()
-	
+	l = tf.keras.losses.LogCosh()	
 	return l(y_true, y_pred).numpy()
 
 
-def evaluate(model, model_name, df_train, target, features, testing=True, df_test=None, cv=None):
+def poisson_loss(y_true, y_pred):
+	p = tf.keras.losses.Poisson()
+	return p(y_true, y_pred).numpy()
+
+
+def evaluate(model, model_name, df_train, target, features, testing=True, df_test=None, cv=None, save=None):
 
 	df_train = df_train[features]
 	scaler = StandardScaler()
@@ -66,36 +69,36 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 			print(f'training {model_name}... split: ({i+1}/{cv})')
 
 			train, test = fold			
-			transformer = FeatureTransformer()
-			transformer.fit(df_train_copy.iloc[train])
+			# transformer = FeatureTransformer()
+			# transformer.fit(df_train_copy.iloc[train])
 
-			X_train = transformer.transform(df_train_copy.iloc[train])
-			X_train = scaler.fit_transform(X_train.values)
-			# X_train = scaler.fit_transform(df_train_copy.iloc[train].values)
+			# X_train = transformer.transform(df_train_copy.iloc[train])
+			# X_train = scaler.fit_transform(X_train.values)
+			X_train = scaler.fit_transform(df_train_copy.iloc[train].values)
 
-			X_val = transformer.transform(df_train_copy.iloc[test])
-			X_val = scaler.transform(X_val.values)
-			# X_val = scaler.transform(df_train_copy.iloc[test].values)
+			# X_val = transformer.transform(df_train_copy.iloc[test])
+			# X_val = scaler.transform(X_val.values)
+			X_val = scaler.transform(df_train_copy.iloc[test].values)
 
 			y_train = target_copy[train]
 			y_val = target_copy[test]
 
-			y_train = np.sqrt(y_train + 1)
+			#y_train = np.sqrt(y_train + 1)
 
 			
 			if 'NeuralNet' in model_name:
 				# model.build(n_features=X_train.shape[1])
 				# model.train(X_train, y_train, X_val, y_val, verbose=0)
-				model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), verbose=0)
+				model.fit(X_train, y_train, X_val, y_val, verbose=0)
 			elif 'CatBoost' in model_name:
-				model.fit(X_train, y_train, eval_set=(X_val, np.sqrt(y_val + 1)), early_stopping_rounds=10)
+				model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=10)
 			elif 'XGB' in model_name:
-				model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, np.sqrt(y_val + 1))], early_stopping_rounds=10, verbose=False)
+				model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, y_val)], early_stopping_rounds=10, verbose=False)
 			else:
 				model.fit(X_train, y_train)
 
 			# y_pred = model.predict(X_val)
-			y_pred = np.power(model.predict(X_val), 2) - 1
+			y_pred = model.predict(X_val)
 			y_pred = y_pred.clip(min = .01)
 
 			mse.append(mean_squared_error(y_val, y_pred))
@@ -107,27 +110,27 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		X_train, X_val, y_train, y_val = train_test_split(df_train, target, test_size=0.1, random_state=0)
 		# Scale data
 
-		transformer = FeatureTransformer()
-		transformer.fit(df_train_copy.iloc[train])
+		# transformer = FeatureTransformer()
+		# transformer.fit(df_train_copy.iloc[train])
 
-		X_train = transformer.transform(X_train)
-		X_train = scaler.fit_transform(X_train)
-		# X_train = scaler.fit_transform(X_train.values)
+		# X_train = transformer.transform(X_train)
+		# X_train = scaler.fit_transform(X_train)
+		X_train = scaler.fit_transform(X_train.values)
 
-		X_val = transformer.transform(X_val)
-		X_val = scaler.transform(X_val)
-		# X_val = scaler.transform(X_val.values)
+		# X_val = transformer.transform(X_val)
+		# X_val = scaler.transform(X_val)
+		X_val = scaler.transform(X_val.values)
 
-		y_train = np.sqrt(y_train + 1)
+		#y_train = np.sqrt(y_train + 1)
 
 		if 'NeuralNet' in model_name:
 			# model.build(n_features=X_train.shape[1])
 			# model.train(X_train, y_train, X_val, y_val, verbose=0)
-			model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1), verbose=0)
+			model.fit(X_train, y_train, X_val, y_val, verbose=0)
 		elif 'CatBoost' in model_name:
-			model.fit(X_train, y_train, eval_set=(X_val, np.sqrt(y_val + 1)), early_stopping_rounds=10)
+			model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=10)
 		elif 'XGB' in model_name:
-			model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, np.sqrt(y_val + 1))], early_stopping_rounds=10, verbose=False)
+			model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, y_val)], early_stopping_rounds=10, verbose=False)
 		else:
 			model.fit(X_train, y_train)
 
@@ -139,55 +142,54 @@ def evaluate(model, model_name, df_train, target, features, testing=True, df_tes
 		X_test_home = X_test_home[features]
 		X_test_away = X_test_away[features]
 
-		X_test_home = transformer.transform(X_test_home)
-		X_test_away = transformer.transform(X_test_away)
+		# X_test_home = transformer.transform(X_test_home)
+		# X_test_away = transformer.transform(X_test_away)
 
 		X_test_home = scaler.transform(X_test_home)
 		X_test_away = scaler.transform(X_test_away)
 
 		score1_pred = model.predict(X_test_home)
 		score2_pred = model.predict(X_test_away)
-		score1_pred = np.power(model.predict(X_test_home), 2) -1
-		score2_pred = np.power(model.predict(X_test_away), 2) -1
+		# score1_pred = np.power(model.predict(X_test_home), 2) -1
+		# score2_pred = np.power(model.predict(X_test_away), 2) -1
 		score1_pred = score1_pred.clip(min = .01)
 		score2_pred = score2_pred.clip(min = .01)
 
-		mse_test = (mean_squared_error(y_test_home, score1_pred) + mean_squared_error(y_test_away, score2_pred)) /2
-		mae_test = (mean_absolute_error(y_test_home, score1_pred) + mean_absolute_error(y_test_away, score2_pred)) /2
-		pdev_test = (mean_poisson_deviance(y_test_home, score1_pred) + mean_poisson_deviance(y_test_away, score2_pred)) /2
-		rmse_test = (np.sqrt(mean_squared_error(y_test_home, score1_pred)) + np.sqrt(mean_squared_error(y_test_away, score2_pred))) /2
-		mape_test = (mean_absolute_percentage_error(y_test_home, score1_pred) + mean_absolute_percentage_error(y_test_away, score2_pred)) /2
-		msle_test = (mean_squared_log_error(y_test_home, score1_pred) + mean_squared_log_error(y_test_away, score2_pred)) /2
-		medae_test = (median_absolute_error(y_test_home, score1_pred) + median_absolute_error(y_test_away, score2_pred)) /2
-		r2_test = (r2_score(y_test_home, score1_pred) + r2_score(y_test_away, score2_pred)) /2
+		
+		if save is not None:
+			if model_name in save:
+				model.save_model(f'models/{model_name}')
 
+		# mse_test = (mean_squared_error(y_test_home, score1_pred) + mean_squared_error(y_test_away, score2_pred)) /2
+		# mae_test = (mean_absolute_error(y_test_home, score1_pred) + mean_absolute_error(y_test_away, score2_pred)) /2
+		# pdev_test = (mean_poisson_deviance(y_test_home, score1_pred) + mean_poisson_deviance(y_test_away, score2_pred)) /2
+		# rmse_test = (np.sqrt(mean_squared_error(y_test_home, score1_pred)) + np.sqrt(mean_squared_error(y_test_away, score2_pred))) /2
+		# mape_test = (mean_absolute_percentage_error(y_test_home, score1_pred) + mean_absolute_percentage_error(y_test_away, score2_pred)) /2
+		# msle_test = (mean_squared_log_error(y_test_home, score1_pred) + mean_squared_log_error(y_test_away, score2_pred)) /2
+		# medae_test = (median_absolute_error(y_test_home, score1_pred) + median_absolute_error(y_test_away, score2_pred)) /2
+		# r2_test = (r2_score(y_test_home, score1_pred) + r2_score(y_test_away, score2_pred)) /2
 
-		# df_error = df_test.copy()
-		# preds = np.concatenate((score1_pred, score2_pred), axis=None)
-		# df_error['pred'] = preds
-		# df_error['mae'] = np.absolute(df_error['score1'] - df_error['pred'])
-		# df_error['mse'] = np.absolute((df_error['score1'] - df_error['pred'])) ** 2
-		# df_error.to_csv(f'{model_name}_test_errors.csv')
+		# foot_poisson = FootballPoissonModel()
+		# home_win, draw, away_win = foot_poisson.predict_chances(score1_pred, score2_pred)
+		# over, under = foot_poisson.predict_overs(score1_pred, score2_pred)
+		# df_predictions = df_test[df_test.home == 1].copy()
 
-		foot_poisson = FootballPoissonModel()
-		home_win, draw, away_win = foot_poisson.predict_chances(score1_pred, score2_pred)
-		over, under = foot_poisson.predict_overs(score1_pred, score2_pred)
-		df_predictions = df_test[df_test.home == 1].copy()
+		# predictions = pd.DataFrame(data={'score1_pred': score1_pred.ravel(), 'score2_pred': score2_pred.ravel(),
+		# 							 'homewin_pred': np.clip(list(home_win), a_min=0.01, a_max=None), 
+		# 							 'draw_pred': np.clip(list(draw), a_min=0.01, a_max=None), 
+		# 							 'awaywin_pred': np.clip(list(away_win), a_min=0.01, a_max=None),
+		# 							 '>2.5_pred': over, '<2.5_pred': under})
 
-		predictions = pd.DataFrame(data={'score1_pred': score1_pred.ravel(), 'score2_pred': score2_pred.ravel(),
-									 'homewin_pred': np.clip(list(home_win), a_min=0.01, a_max=None), 
-									 'draw_pred': np.clip(list(draw), a_min=0.01, a_max=None), 
-									 'awaywin_pred': np.clip(list(away_win), a_min=0.01, a_max=None),
-									 '>2.5_pred': over, '<2.5_pred': under})
+		# df_predictions = pd.concat([df_predictions.reset_index(drop=True), predictions], axis=1)
+		# book = Bookmaker(df_predictions, odds='max', stake=5)
+		# book.calculate()
 
-		df_predictions = pd.concat([df_predictions.reset_index(drop=True), predictions], axis=1)
-		book = Bookmaker(df_predictions, odds='max', stake=5)
-		book.calculate()
+		# #df_predictions.to_csv(f'{model_name}_predictions.csv')
 
-		returns = df_predictions[['bet_return']].sum().values
-		returns_over = df_predictions[['bet_return_over']].sum().values
+		# returns = df_predictions[['bet_return']].sum().values
+		# returns_over = df_predictions[['bet_return_over']].sum().values
 
-	return np.mean(mse), np.mean(mae), np.mean(pdev), np.mean(rmse), mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns[0], returns_over[0]
+	return y_test_home, y_test_away, score1_pred, score2_pred
 
 
 
@@ -213,23 +215,26 @@ def optimize(params, name, df_train, df_target):
 	logcosh = []
 	returns = []
 	returns_over = []
+	poisson = []
 
 	for train, test in kf.split(df_train_copy):
-		transformer = FeatureTransformer()
-		transformer.fit(df_train_copy.iloc[train])
+		# transformer = FeatureTransformer()
+		# transformer.fit(df_train_copy.iloc[train])
 
-		X_train = transformer.transform(df_train_copy.iloc[train])
+		# X_train = transformer.transform(df_train_copy.iloc[train])
+		# X_train = scaler.fit_transform(X_train.values)
 
-		#print(X_train.describe())
-		X_train = scaler.fit_transform(X_train.values)
+		X_train = scaler.fit_transform(df_train_copy.iloc[train].values)
 
-		X_val = transformer.transform(df_train_copy.iloc[test])
-		X_val = scaler.transform(X_val.values)
+		# X_val = transformer.transform(df_train_copy.iloc[test])
+		# X_val = scaler.transform(X_val.values)
+
+		X_val = scaler.transform(df_train_copy.iloc[test].values)
 
 		y_train = target_copy[train]
 		y_val = target_copy[test]
 
-		y_train = np.sqrt(y_train + 1)
+		#y_train = np.sqrt(y_train + 1)
 
 		if 'NeuralNet' in name:
 			if params['num_layers'] == 2:
@@ -242,7 +247,7 @@ def optimize(params, name, df_train, df_target):
 							batch_size=params['batch_2'],
 							metrics=['mse', 'mae'])
 
-				history = model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1),
+				history = model.fit(X_train, y_train, X_val, y_val,
 								   		verbose=0, 
 								   		epochs=500)
 
@@ -256,7 +261,7 @@ def optimize(params, name, df_train, df_target):
 							batch_size=params['batch_3'], 
 							metrics=['mse', 'mae'])
 
-				history = model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1),
+				history = model.fit(X_train, y_train, X_val, y_val,
 								   		verbose=0,						   		
 								   		epochs=500)
 
@@ -270,11 +275,12 @@ def optimize(params, name, df_train, df_target):
 							batch_size=params['batch_4'], 
 							metrics=['mse', 'mae'])
 
-				history = model.fit(X_train, y_train, X_val, np.sqrt(y_val + 1),
+				history = model.fit(X_train, y_train, X_val, y_val,
 								   		verbose=0,
 								   		epochs=500)
 
-			y_pred = np.power(model.predict(X_val), 2)-1
+			# y_pred = np.power(model.predict(X_val), 2)-1
+			y_pred = model.predict(X_val)
 			y_pred = y_pred.clip(min = .01)
 		else:
 			if 'CatBoost' in name:
@@ -286,7 +292,7 @@ def optimize(params, name, df_train, df_target):
 									bagging_temperature=params['bagging_temperature'],
 									random_strength=params['random_strength'],
 									verbose=0)
-				model.fit(X_train, y_train, eval_set=(X_val, np.sqrt(y_val + 1)), early_stopping_rounds=10)
+				model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=10)
 
 			elif 'XGBoost' in name:
 				model = XGBRegressor(n_estimators=params['n_estimators'],
@@ -301,7 +307,7 @@ def optimize(params, name, df_train, df_target):
 											nthread=4,
 											booster='gbtree',
 											tree_method='exact')
-				model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, np.sqrt(y_val + 1))], early_stopping_rounds=10, verbose=False)
+				model.fit(X_train, y_train, eval_metric="mae", eval_set=[(X_val, y_val)], early_stopping_rounds=10, verbose=False)
 
 			elif 'HistGradientBoost' in name:
 				model = HistGradientBoostingRegressor(loss='poisson',
@@ -317,7 +323,8 @@ def optimize(params, name, df_train, df_target):
 											max_features=params['max_features'])
 				model.fit(X_train, y_train)
 
-			y_pred = np.power(model.predict(X_val), 2)-1
+			#y_pred = np.power(model.predict(X_val), 2)-1
+			y_pred = model.predict(X_val)
 			y_pred = y_pred.clip(min = .01)
 
 		# foot_poisson = FootballPoissonModel()
@@ -341,9 +348,10 @@ def optimize(params, name, df_train, df_target):
 		medae.append(median_absolute_error(y_val, y_pred))
 		r2.append(r2_score(y_val, y_pred))
 		huber.append(huber_loss(y_val, y_pred))
-		logcosh.append(logcosh_loss(y_val, y_pred))
-	
-	loss = np.mean(logcosh)
+		poisson.append(poisson_loss(y_val, y_pred))
+		#logcosh.append(logcosh_loss(y_val, y_pred))
+
+	loss = np.mean(poisson)
 
 	return {'status': 'ok',
 			'loss': loss,
@@ -574,7 +582,7 @@ neuralnet_space_mae = hp.choice('model',
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['mae']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
@@ -617,7 +625,7 @@ neuralnet_space_poisson = hp.choice('model',
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['poisson']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
@@ -660,7 +668,7 @@ neuralnet_space_logcosh = hp.choice('model',
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['logcosh']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
@@ -703,7 +711,7 @@ neuralnet_space_huber = hp.choice('model',
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['huber_loss']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
@@ -746,7 +754,7 @@ neuralnet_space_mape = hp.choice('model',
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['mean_absolute_percentage_error']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.002))),
@@ -783,13 +791,13 @@ neuralnet_space_mape = hp.choice('model',
 				])
 
 neuralnet_space_mse = hp.choice('model',
-			[{'num_layers': 2,  'batch_2': scope.int(hp.quniform('batch_2', 32, 1256, 2)),		
+			[{'num_layers': 2,  'batch_2': scope.int(hp.quniform('batch_2', 32, 700, 2)),		
 								'activations_21': hp.choice('activations_21', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
 								'activations_22': hp.choice('activations_22', ['relu', 'tanh', 'sigmoid', 'selu', 'hard_sigmoid']),
 								'nodes_21': scope.int(hp.qloguniform('nodes_21', np.log(2), np.log(1024), 2)),
 								'nodes_22': scope.int(hp.qloguniform('nodes_22', np.log(2), np.log(1024), 2)),
 								'loss_2': hp.choice('loss_2', ['mse']),
-								'features': hp.choice('features_2', [numerical_features+categorical_features]),
+								'features': hp.choice('features_2', [numerical_features]),
 								'optimizer_2': hp.choice('optimizer_2', [
 									scope.Adam(
 										learning_rate=hp.loguniform('adam_learning_rate_2', np.log(0.001), np.log(0.0012))),
@@ -813,7 +821,7 @@ xgb_space_sqrd_error = {
 		'subsample': hp.quniform('subsample', 0.5, 1, 0.05),
 		'gamma': hp.quniform('gamma', 0.5, 3, 0.05),
 		'colsample_bytree': hp.quniform('colsample_bytree', 0.5, 1, 0.05),
-		'features': hp.choice('features', [numerical_features+categorical_features]),
+		'features': hp.choice('features', [numerical_features]),
 		'objective': hp.choice('objective', ['reg:squarederror'])
 		#'lambda': hp.quniform('lambda', 0, 5, 0.1),
 		#'alpha': hp.quniform('alpha', 0, 3, 0.1),
@@ -827,7 +835,7 @@ xgb_space_poisson = {
 		'subsample': hp.quniform('subsample', 0.5, 1, 0.05),
 		'gamma': hp.quniform('gamma', 0.5, 3, 0.05),
 		'colsample_bytree': hp.quniform('colsample_bytree', 0.5, 1, 0.05),
-		'features': hp.choice('features', [numerical_features+categorical_features]),
+		'features': hp.choice('features', [numerical_features]),
 		'objective': hp.choice('objective', ['count:poisson'])
 		#'lambda': hp.quniform('lambda', 0, 5, 0.1),
 		#'alpha': hp.quniform('alpha', 0, 3, 0.1),
@@ -842,7 +850,7 @@ catboost_space_huber = {
 		'bagging_temperature': hp.uniform('bagging_temperature', 0.0, 100),
 		'random_strength': hp.uniform('random_strength', 0.0, 100),
 		'objective': hp.choice('objective', ['Huber:delta=1']),
-		'features': hp.choice('features', [numerical_features+categorical_features])
+		'features': hp.choice('features', [numerical_features])
 		# 'pca_n_components': scope.int(hp.quniform('pca_n_components', 2, 30, 1))
 		}
 
@@ -854,7 +862,7 @@ catboost_space_mae = {
 		'bagging_temperature': hp.uniform('bagging_temperature', 0.0, 100),
 		'random_strength': hp.uniform('random_strength', 0.0, 100),
 		'objective': hp.choice('objective', ['MAE']),
-		'features': hp.choice('features', [numerical_features+categorical_features])
+		'features': hp.choice('features', [numerical_features])
 		# 'pca_n_components': scope.int(hp.quniform('pca_n_components', 2, 30, 1))
 		}
 
@@ -866,7 +874,7 @@ catboost_space_poisson = {
 		'bagging_temperature': hp.uniform('bagging_temperature', 0.0, 100),
 		'random_strength': hp.uniform('random_strength', 0.0, 100),
 		'objective': hp.choice('objective', ['Poisson']),
-		'features': hp.choice('features', [numerical_features+categorical_features])
+		'features': hp.choice('features', [numerical_features])
 		# 'pca_n_components': scope.int(hp.quniform('pca_n_components', 2, 30, 1))
 		}
 
@@ -876,7 +884,7 @@ extratrees_space = {
 		'min_samples_split': scope.int(hp.quniform('min_samples_split', 2, 10, 1)),
 		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 20, 1)),
 		'max_features': hp.choice('max_features', ['auto', 'sqrt', 'log2']),
-		'features': hp.choice('features', [numerical_features+categorical_features])
+		'features': hp.choice('features', [numerical_features])
 		}
 
 
@@ -884,18 +892,18 @@ histgradboost_space = {
 		'learning_rate': hp.uniform('learning_rate', 0.01, 0.8),
 		'max_leaf_nodes': scope.int(hp.quniform('max_leaf_nodes', 2, 60, 1)),
 		'min_samples_leaf': scope.int(hp.quniform('min_samples_leaf', 1, 60, 1)),
-		'features': hp.choice('features', [numerical_features+categorical_features])
+		'features': hp.choice('features', [numerical_features])
 		}
 
 
-models = {# 'XGBoost_sqrd_err': xgb_space_sqrd_error,
-			#'XGBoost_poisson': xgb_space_poisson,
+models = {#'XGBoost_sqrd_err': xgb_space_sqrd_error,
+			# 'XGBoost_poisson': xgb_space_poisson,
 			# 'CatBoost_huber': catboost_space_huber,
 			# 'CatBoost_mae': catboost_space_mae,
 			# 'CatBoost_poisson': catboost_space_poisson,
 			# 'NeuralNet_mae': neuralnet_space_mae,
-			# 'NeuralNet_poisson': neuralnet_space_poisson,
-			'NeuralNet_logcosh': neuralnet_space_logcosh,
+			'NeuralNet_poisson': neuralnet_space_poisson,
+			# 'NeuralNet_logcosh': neuralnet_space_logcosh,
 			# 'NeuralNet_huber': neuralnet_space_huber,
 			# 'NeuralNet_mape': neuralnet_space_mape,
 			# 'NeuralNet_mse': neuralnet_space_mse,
@@ -918,28 +926,29 @@ basic_models = {
 		'NeuralNet_poisson': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='poisson'),
 		'NeuralNet_logcosh': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='logcosh'),
 		'NeuralNet_mae': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_absolute_error'),
-		'NeuralNet_mse': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_squared_error'),
-		'NeuralNet_msle': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_squared_logarithmic_error'),
-		'NeuralNet_mape': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_absolute_percentage_error'),
-		'NeuralNet_huber': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='huber_loss')
+		# 'NeuralNet_mse': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_squared_error'),
+		# 'NeuralNet_msle': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_squared_logarithmic_error'),
+		# 'NeuralNet_mape': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='mean_absolute_percentage_error'),
+		# 'NeuralNet_huber': NeuralNetworkModel(n_features=len(numerical_features+categorical_features), loss='huber_loss')
 		}
 
 
 
-catboost_mae_params = {'bagging_temperature': 78.58534746356862, 'colsample_bylevel': 0.3632609874748783, 'learning_rate': 0.608282521552185, 'max_depth': 2, 'objective': 'MAE', 'random_strength': 12.688356126720745}
-neuralnet_mae_params = {'activations': ('sigmoid', 'hard_sigmoid', 'hard_sigmoid'), 'batch': 292,  'loss': 'mae', 'nodes': (2, 8, 4), 'num_layers': 3, 'optimizer': tf.keras.optimizers.Adam(learning_rate=0.001)}
-xgboost_poisson_params = {'colsample_bytree': 0.8500000000000001, 'eta': 0.375, 'gamma': 1.2000000000000002, 'max_depth': 4, 'min_child_weight': 1, 'n_estimators': 993, 'objective': 'count:poisson', 'subsample': 0.7000000000000001}
-catboost_poisson_params = {'bagging_temperature': 47.65845300533181, 'colsample_bylevel': 0.5766841465200845, 'learning_rate': 0.326515365988143, 'max_depth': 1, 'objective': 'Poisson', 'random_strength': 99.53925054053036}
-neuralnet_poisson_params = {'activations': ('hard_sigmoid', 'tanh', 'sigmoid'), 'batch': 1254, 'loss': 'poisson', 'nodes': (62, 2, 192), 'num_layers': 3, 'optimizer': tf.keras.optimizers.RMSprop(learning_rate=0.001963)}
-xgboost_sqrd_err_params = {'colsample_bytree': 0.75, 'eta': 0.375, 'gamma': 0.8, 'max_depth': 2, 'min_child_weight': 6, 'n_estimators': 613, 'objective': 'reg:squarederror', 'subsample': 0.8500000000000001}
-neuralnet_mse_params = {'activations': ('hard_sigmoid', 'sigmoid'), 'batch': 296, 'loss': 'mse', 'nodes': (64, 36), 'num_layers': 2, 'optimizer': tf.keras.optimizers.RMSprop(learning_rate=0.0012)}
-catboost_huber_params = {'bagging_temperature': 97.0296741395774, 'colsample_bylevel': 0.4298160300802163, 'learning_rate': 0.023455863779940515, 'max_depth': 9, 'objective': 'Huber:delta=1', 'random_strength': 70.8981155469218}
-neuralnet_huber_params = {'activations': ('hard_sigmoid', 'relu','hard_sigmoid'), 'batch': 738, 'loss': 'huber_loss', 'nodes': (2, 916, 152), 'num_layers': 3, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.00117)}
-neuralnet_mape_params = {'activations': ('relu', 'hard_sigmoid'), 'batch': 936, 'loss': 'mean_absolute_percentage_error', 'nodes': (216, 848), 'num_layers': 2, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.00192)}
-neuralnet_logcosh_params = {'activations': ('hard_sigmoid', 'sigmoid', 'sigmoid'), 'batch': 1230, 'loss': 'logcosh', 'nodes': (48, 4, 196), 'num_layers': 3, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.001287)}
+catboost_mae_params = {'bagging_temperature': 69.32347629336867, 'colsample_bylevel': 0.9042263919423306, 'learning_rate': 0.059135216445649785, 'max_depth': 6, 'objective': 'MAE', 'random_strength': 57.5044030038614}
+neuralnet_mae_params = {'activations': ('hard_sigmoid', 'selu', 'tanh'), 'batch': 60, 'loss': 'mae', 'nodes': (14, 44, 104), 'num_layers': 3, 'optimizer': tf.keras.optimizers.Adam(learning_rate=0.0010012101847678423)}
+xgboost_poisson_params = {'colsample_bytree': 0.9, 'eta': 0.2, 'gamma': 1.25, 'max_depth': 3, 'min_child_weight': 6, 'n_estimators': 885, 'objective': 'count:poisson', 'subsample': 0.8}
+catboost_poisson_params = {'bagging_temperature': 10.45943130929077, 'colsample_bylevel': 0.4316079607705634, 'learning_rate': 0.1811321733393647, 'max_depth': 4, 'objective': 'Poisson', 'random_strength': 38.80202988079048}
+neuralnet_poisson_params = {'activations': ('sigmoid', 'sigmoid'), 'batch': 994, 'loss': 'poisson', 'nodes': (2, 306), 'num_layers': 2, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.001287)}
+histgradboost_poisson_params = {'learning_rate': 0.10109485695245424, 'max_leaf_nodes': 3, 'min_samples_leaf': 57}
+xgboost_sqrd_err_params = {'colsample_bytree': 0.75, 'eta': 0.25, 'gamma': 1.4000000000000001, 'max_depth': 3, 'min_child_weight': 4, 'n_estimators': 291, 'objective': 'reg:squarederror', 'subsample': 0.8500000000000001}
+neuralnet_mse_params =  {'activations': ('sigmoid', 'tanh'), 'batch': 308, 'loss': 'mse', 'nodes': (52, 18), 'num_layers': 2, 'optimizer': tf.keras.optimizers.Adam(learning_rate=0.001)}
+extra_trees_mse_params = {'max_features': 'log2', 'min_samples_leaf': 7, 'min_samples_split': 7, 'n_estimators': 478}
+catboost_huber_params = {'bagging_temperature': 8.06887605641524, 'colsample_bylevel': 0.4750844452806466, 'learning_rate': 0.08477793380600201, 'max_depth': 4, 'objective': 'Huber:delta=1', 'random_strength': 91.32730657879162}
+neuralnet_huber_params = {'activations': ('sigmoid', 'hard_sigmoid', 'sigmoid'), 'batch': 1002, 'loss': 'huber_loss', 'nodes': (4, 446, 20), 'num_layers': 3, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.001046389)}
 
 
-opt_models = {'CatBoost_mae': CatBoostRegressor(objective=catboost_mae_params['objective'],
+opt_models = {
+				'CatBoost_mae': CatBoostRegressor(objective=catboost_mae_params['objective'],
 								learning_rate=catboost_mae_params['learning_rate'],
 								#l2_leaf_reg=score1_params['l2_leaf_reg'],
 								max_depth=catboost_mae_params['max_depth'],
@@ -947,14 +956,14 @@ opt_models = {'CatBoost_mae': CatBoostRegressor(objective=catboost_mae_params['o
 								bagging_temperature=catboost_mae_params['bagging_temperature'],
 								random_strength=catboost_mae_params['random_strength'],
 								verbose=0),
-			 'CatBoost_poisson': CatBoostRegressor(objective=catboost_poisson_params['objective'],
-								learning_rate=catboost_poisson_params['learning_rate'],
-								#l2_leaf_reg=score1_params['l2_leaf_reg'],
-								max_depth=catboost_poisson_params['max_depth'],
-								colsample_bylevel=catboost_poisson_params['colsample_bylevel'],
-								bagging_temperature=catboost_poisson_params['bagging_temperature'],
-								random_strength=catboost_poisson_params['random_strength'],
-								verbose=0),
+			 # 'CatBoost_poisson': CatBoostRegressor(objective=catboost_poisson_params['objective'],
+				# 				learning_rate=catboost_poisson_params['learning_rate'],
+				# 				#l2_leaf_reg=score1_params['l2_leaf_reg'],
+				# 				max_depth=catboost_poisson_params['max_depth'],
+				# 				colsample_bylevel=catboost_poisson_params['colsample_bylevel'],
+				# 				bagging_temperature=catboost_poisson_params['bagging_temperature'],
+				# 				random_strength=catboost_poisson_params['random_strength'],
+				# 				verbose=0),
 			  'XGB_poisson': XGBRegressor(n_estimators=xgboost_poisson_params['n_estimators'],
 							eta=xgboost_poisson_params['eta'],
 							max_depth=xgboost_poisson_params['max_depth'],
@@ -966,25 +975,25 @@ opt_models = {'CatBoost_mae': CatBoostRegressor(objective=catboost_mae_params['o
 							nthread=4,
 							booster='gbtree',
 							tree_method='exact'),
-			'XGB_mse': XGBRegressor(n_estimators=xgboost_sqrd_err_params['n_estimators'],
-							eta=xgboost_sqrd_err_params['eta'],
-							max_depth=xgboost_sqrd_err_params['max_depth'],
-							min_child_weight=xgboost_sqrd_err_params['min_child_weight'],
-							subsample=xgboost_sqrd_err_params['subsample'],
-							gamma=xgboost_sqrd_err_params['gamma'],
-							colsample_bytree=xgboost_sqrd_err_params['colsample_bytree'],
-							#reg_lambda=xgb_params['lambda'],
-							nthread=4,
-							booster='gbtree',
-							tree_method='exact'),
+			# 'XGB_mse': XGBRegressor(n_estimators=xgboost_sqrd_err_params['n_estimators'],
+			# 				eta=xgboost_sqrd_err_params['eta'],
+			# 				max_depth=xgboost_sqrd_err_params['max_depth'],
+			# 				min_child_weight=xgboost_sqrd_err_params['min_child_weight'],
+			# 				subsample=xgboost_sqrd_err_params['subsample'],
+			# 				gamma=xgboost_sqrd_err_params['gamma'],
+			# 				colsample_bytree=xgboost_sqrd_err_params['colsample_bytree'],
+			# 				#reg_lambda=xgb_params['lambda'],
+			# 				nthread=4,
+			# 				booster='gbtree',
+			# 				tree_method='exact'),
 			  # 'HistGradBoost': HistGradientBoostingRegressor(loss='poisson',
-					# 						learning_rate=histgradboost_params['learning_rate'],
-					# 						max_leaf_nodes=histgradboost_params['max_leaf_nodes'],
-					# 						min_samples_leaf=histgradboost_params['min_samples_leaf']),
-			  # 'ExtraTrees': ExtraTreesRegressor(n_estimators=extratree_params['n_estimators'],
-					# 						min_samples_split=extratree_params['min_samples_split'],
-					# 						min_samples_leaf=extratree_params['min_samples_leaf'],
-					# 						max_features=extratree_params['max_features']),
+					# 						learning_rate=histgradboost_poisson_params['learning_rate'],
+					# 						max_leaf_nodes=histgradboost_poisson_params['max_leaf_nodes'],
+					# 						min_samples_leaf=histgradboost_poisson_params['min_samples_leaf']),
+			  # 'ExtraTrees': ExtraTreesRegressor(n_estimators=extra_trees_mse_params['n_estimators'],
+					# 						min_samples_split=extra_trees_mse_params['min_samples_split'],
+					# 						min_samples_leaf=extra_trees_mse_params['min_samples_leaf'],
+					# 						max_features=extra_trees_mse_params['max_features']),
 			  'NeuralNet_mae': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
 							optimizer=neuralnet_mae_params['optimizer'],
 							#dropout=params['dropout_3'],
@@ -993,103 +1002,144 @@ opt_models = {'CatBoost_mae': CatBoostRegressor(objective=catboost_mae_params['o
 							loss=neuralnet_mae_params['loss'],
 							batch_size=neuralnet_mae_params['batch'],
 							metrics=['mse', 'mae']),
-			  'NeuralNet_Poisson': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
-							optimizer=neuralnet_poisson_params['optimizer'],
-							#dropout=params['dropout_3'],
-							activations=neuralnet_poisson_params['activations'],
-							nodes=neuralnet_poisson_params['nodes'],
-							loss=neuralnet_poisson_params['loss'],
-							batch_size=neuralnet_poisson_params['batch'],
-							metrics=['mse', 'mae']),
-			  'NeuralNet_mse': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
-							optimizer=neuralnet_mse_params['optimizer'],
-							#dropout=params['dropout_3'],
-							activations=neuralnet_mse_params['activations'],
-							nodes=neuralnet_mse_params['nodes'],
-							loss=neuralnet_mse_params['loss'],
-							batch_size=neuralnet_poisson_params['batch'],
-							metrics=['mse', 'mae']),
-			  'NeuralNet_huber': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
-							optimizer=neuralnet_huber_params['optimizer'],
-							#dropout=params['dropout_3'],
-							activations=neuralnet_huber_params['activations'],
-							nodes=neuralnet_huber_params['nodes'],
-							loss=neuralnet_huber_params['loss'],
-							batch_size=neuralnet_huber_params['batch'],
-							metrics=['mse', 'mae']),
-			  'NeuralNet_mape': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
-							optimizer=neuralnet_mape_params['optimizer'],
-							#dropout=params['dropout_3'],
-							activations=neuralnet_mape_params['activations'],
-							nodes=neuralnet_mape_params['nodes'],
-							loss=neuralnet_mape_params['loss'],
-							batch_size=neuralnet_mape_params['batch'],
-							metrics=['mse', 'mae']),
-			  'NeuralNet_mape': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
-							optimizer=neuralnet_logcosh_params['optimizer'],
-							#dropout=params['dropout_3'],
-							activations=neuralnet_logcosh_params['activations'],
-							nodes=neuralnet_logcosh_params['nodes'],
-							loss=neuralnet_logcosh_params['loss'],
-							batch_size=neuralnet_logcosh_params['batch'],
-							metrics=['mse', 'mae'])
+			  # 'NeuralNet_Poisson': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
+					# 		optimizer=neuralnet_poisson_params['optimizer'],
+					# 		#dropout=params['dropout_3'],
+					# 		activations=neuralnet_poisson_params['activations'],
+					# 		nodes=neuralnet_poisson_params['nodes'],
+					# 		loss=neuralnet_poisson_params['loss'],
+					# 		batch_size=neuralnet_poisson_params['batch'],
+					# 		metrics=['mse', 'mae']),
+			  # 'NeuralNet_mse': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
+					# 		optimizer=neuralnet_mse_params['optimizer'],
+					# 		#dropout=params['dropout_3'],
+					# 		activations=neuralnet_mse_params['activations'],
+					# 		nodes=neuralnet_mse_params['nodes'],
+					# 		loss=neuralnet_mse_params['loss'],
+					# 		batch_size=neuralnet_poisson_params['batch'],
+					# 		metrics=['mse', 'mae']),
+			  # 'NeuralNet_huber': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
+					# 		optimizer=neuralnet_huber_params['optimizer'],
+					# 		#dropout=params['dropout_3'],
+					# 		activations=neuralnet_huber_params['activations'],
+					# 		nodes=neuralnet_huber_params['nodes'],
+					# 		loss=neuralnet_huber_params['loss'],
+					# 		batch_size=neuralnet_huber_params['batch'],
+					# 		metrics=['mse', 'mae']),
+			  # 'NeuralNet_mape': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
+					# 		optimizer=neuralnet_mape_params['optimizer'],
+					# 		#dropout=params['dropout_3'],
+					# 		activations=neuralnet_mape_params['activations'],
+					# 		nodes=neuralnet_mape_params['nodes'],
+					# 		loss=neuralnet_mape_params['loss'],
+					# 		batch_size=neuralnet_mape_params['batch'],
+					# 		metrics=['mse', 'mae']),
+			  # 'NeuralNet_logcosh': NeuralNetworkModel(n_features=len(numerical_features+categorical_features),
+					# 		optimizer=neuralnet_logcosh_params['optimizer'],
+					# 		#dropout=params['dropout_3'],
+					# 		activations=neuralnet_logcosh_params['activations'],
+					# 		nodes=neuralnet_logcosh_params['nodes'],
+					# 		loss=neuralnet_logcosh_params['loss'],
+					# 		batch_size=neuralnet_logcosh_params['batch'],
+					# 		metrics=['mse', 'mae'])
 			  }
 
 
-res_dict = {}
-for model_name, model in basic_models.items():
-	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over = evaluate(model, model_name, features=numerical_features+categorical_features, df_train=df_train_transformed, target=target_train_transformed, 
-																							df_test=df_test_transformed, cv=4)
-	res_dict[model_name] = [mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over]
+# res_dict = {}
+# for model_name, model in basic_models.items():
+# 	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over = evaluate(model, model_name, features=numerical_features+categorical_features, df_train=df_train_transformed, target=target_train_transformed, 
+# 																							df_test=df_test_transformed, cv=4)
+# 	res_dict[model_name] = [mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, returns, returns_over]
+# results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['MSE_train', 'MAE_train', 'P_DEVIANCE_train', 'RMSE_train', 'MSE_test', 'MAE_test', 'P_DEVIANCE_test', 'RMSE_test', 'Return', 'Return Over'])
+# print(results_df.sort_values(by='Return'))
 
-results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['MSE_train', 'MAE_train', 'P_DEVIANCE_train', 'RMSE_train', 'MSE_test', 'MAE_test', 'P_DEVIANCE_test', 'RMSE_test', 'Return', 'Return Over'])
-print(results_df.sort_values(by='Return'))
 
+foot_poisson = FootballPoissonModel()
+score1_pred_avg = np.zeros(df_test.shape[0])
+score2_pred_avg = np.zeros(df_test.shape[0])
 res_dict = {}
 for model_name, model in opt_models.items():
-	mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over = evaluate(model, model_name, features=numerical_features+categorical_features, df_train=df_train_transformed, target=target_train_transformed, 
-																							df_test=df_test_transformed, cv=4)
-	res_dict[model_name] = [mse, mae, pdev, rmse, mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over]
+	score1_true, score2_true, score1_pred, score2_pred = evaluate(model, model_name, features=numerical_features+categorical_features, 
+															df_train=df_train_transformed, 
+															target=target_train_transformed,
+															df_test=df_test_transformed,
+															cv=4, 
+															#save=['NeuralNet_mae', 'XGB_poisson', 'CatBoost_mae']
+															)
 
-results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['MSE_train', 'MAE_train', 'P_DEVIANCE_train', 'RMSE_train', 'MSE_test', 'MAE_test', 'P_DEVIANCE_test', 'RMSE_test', 'MAPE_Test', 'MSLE_test', 'MedAE_test', 'r2_test', 'Return', 'Return Over'])
+
+	mse_test = (mean_squared_error(score1_true, score1_pred) + mean_squared_error(score2_true, score2_pred)) /2
+	mae_test = (mean_absolute_error(score1_true, score1_pred) + mean_absolute_error(score2_true, score2_pred)) /2
+	pdev_test = (mean_poisson_deviance(score1_true, score1_pred) + mean_poisson_deviance(score2_true, score2_pred)) /2
+	rmse_test = (np.sqrt(mean_squared_error(score1_true, score1_pred)) + np.sqrt(mean_squared_error(score2_true, score2_pred))) /2
+	mape_test = (mean_absolute_percentage_error(score1_true, score1_pred) + mean_absolute_percentage_error(score2_true, score2_pred)) /2
+	msle_test = (mean_squared_log_error(score1_true, score1_pred) + mean_squared_log_error(score2_true, score2_pred)) /2
+	medae_test = (median_absolute_error(score1_true, score1_pred) + median_absolute_error(score2_true, score2_pred)) /2
+	r2_test = (r2_score(score1_true, score1_pred) + r2_score(score2_true, score2_pred)) /2
+
+
+
+	score1_pred_avg = score1_pred_avg + score1_pred.ravel()
+	score2_pred_avg = score2_pred_avg + score2_pred.ravel()
+
+	home_win, draw, away_win = foot_poisson.predict_chances(score1_pred, score2_pred)
+	over, under = foot_poisson.predict_overs(score1_pred, score2_pred)
+	df_predictions = df_test.copy()
+
+	predictions = pd.DataFrame(data={'score1_pred': score1_pred.ravel(), 'score2_pred': score2_pred.ravel(),
+								 'homewin_pred': np.clip(list(home_win), a_min=0.01, a_max=None), 
+								 'draw_pred': np.clip(list(draw), a_min=0.01, a_max=None), 
+								 'awaywin_pred': np.clip(list(away_win), a_min=0.01, a_max=None),
+								 '>2.5_pred': over, '<2.5_pred': under})
+
+	df_predictions = pd.concat([df_predictions.reset_index(drop=True), predictions], axis=1)
+	book = Bookmaker(df_predictions, odds='max', stake=5)
+	book.calculate()
+
+	#df_predictions.to_csv(f'{model_name}_predictions.csv')
+
+	returns = df_predictions[['bet_return']].sum().values
+	returns_over = df_predictions[['bet_return_over']].sum().values
+	
+	res_dict[model_name] = [mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over]
+
+score1_pred_avg = score1_pred_avg/len(opt_models)
+score2_pred_avg = score2_pred_avg/len(opt_models)
+
+
+mse_test = (mean_squared_error(score1_true, score1_pred_avg) + mean_squared_error(score2_true, score2_pred_avg)) /2
+mae_test = (mean_absolute_error(score1_true, score1_pred_avg) + mean_absolute_error(score2_true, score2_pred_avg)) /2
+pdev_test = (mean_poisson_deviance(score1_true, score1_pred_avg) + mean_poisson_deviance(score2_true, score2_pred_avg)) /2
+rmse_test = (np.sqrt(mean_squared_error(score1_true, score1_pred_avg)) + np.sqrt(mean_squared_error(score2_true, score2_pred_avg))) /2
+mape_test = (mean_absolute_percentage_error(score1_true, score1_pred_avg) + mean_absolute_percentage_error(score2_true, score2_pred_avg)) /2
+msle_test = (mean_squared_log_error(score1_true, score1_pred_avg) + mean_squared_log_error(score2_true, score2_pred_avg)) /2
+medae_test = (median_absolute_error(score1_true, score1_pred_avg) + median_absolute_error(score2_true, score2_pred_avg)) /2
+r2_test = (r2_score(score1_true, score1_pred_avg) + r2_score(score2_true, score2_pred_avg)) /2
+
+home_win, draw, away_win = foot_poisson.predict_chances(score1_pred_avg, score2_pred_avg)
+over, under = foot_poisson.predict_overs(score1_pred_avg, score2_pred_avg)
+df_predictions = df_test.copy()
+
+predictions = pd.DataFrame(data={'score1_pred': score1_pred_avg.ravel(), 'score2_pred': score2_pred_avg.ravel(),
+							 'homewin_pred': np.clip(list(home_win), a_min=0.01, a_max=None), 
+							 'draw_pred': np.clip(list(draw), a_min=0.01, a_max=None), 
+							 'awaywin_pred': np.clip(list(away_win), a_min=0.01, a_max=None),
+							 '>2.5_pred': over, '<2.5_pred': under})
+
+df_predictions = pd.concat([df_predictions.reset_index(drop=True), predictions], axis=1)
+book = Bookmaker(df_predictions, odds='max', stake=5)
+book.calculate()
+
+#df_predictions.to_csv(f'{model_name}_predictions.csv')
+
+returns = df_predictions[['bet_return']].sum().values
+returns_over = df_predictions[['bet_return_over']].sum().values
+
+res_dict['average_model'] = [mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, medae_test, r2_test, returns, returns_over]
+
+results_df = pd.DataFrame.from_dict(res_dict, orient='index', columns=['MSE_test', 'MAE_test', 'P_DEVIANCE_test', 'RMSE_test', 'MAPE_Test', 'MSLE_test', 'MedAE_test', 'r2_test', 'Return', 'Return Over'])
 print(results_df.sort_values(by='Return'))
 
-
-# score1_pred = df_test.score1_similar
-# score2_pred = df_test.score2_similar
-
-# y_test_home = df_test.score1
-# y_test_away = df_test.score2
-
-# mse_test = (mean_squared_error(y_test_home, score1_pred) + mean_squared_error(y_test_away, score2_pred)) /2
-# mae_test = (mean_absolute_error(y_test_home, score1_pred) + mean_absolute_error(y_test_away, score2_pred)) /2
-# pdev_test = (mean_poisson_deviance(y_test_home, score1_pred) + mean_poisson_deviance(y_test_away, score2_pred)) /2
-# rmse_test = (np.sqrt(mean_squared_error(y_test_home, score1_pred)) + np.sqrt(mean_squared_error(y_test_away, score2_pred))) /2
-# mape_test = (mean_absolute_percentage_error(y_test_home, score1_pred) + mean_absolute_percentage_error(y_test_away, score2_pred)) /2
-# msle_test = (mean_squared_log_error(y_test_home, score1_pred) + mean_squared_log_error(y_test_away, score2_pred)) /2
-# medae_test = (median_absolute_error(y_test_home, score1_pred) + median_absolute_error(y_test_away, score2_pred)) /2
-# r2_test = (r2_score(y_test_home, score1_pred) + r2_score(y_test_away, score2_pred)) /2
-
-# print(mse_test, mae_test, pdev_test, rmse_test, mape_test, msle_test, r2_test)
-
-# foot_poisson = FootballPoissonModel()
-# home_win, draw, away_win = foot_poisson.predict_chances(score1_pred, score2_pred)
-# over, under = foot_poisson.predict_overs(score1_pred, score2_pred)
-# df_predictions = df_test.copy()
-
-# predictions = pd.DataFrame(data={'score1_pred': score1_pred.ravel(), 'score2_pred': score2_pred.ravel(),
-# 							 'homewin_pred': np.clip(list(home_win), a_min=0.01, a_max=None), 
-# 							 'draw_pred': np.clip(list(draw), a_min=0.01, a_max=None), 
-# 							 'awaywin_pred': np.clip(list(away_win), a_min=0.01, a_max=None),
-# 							 '>2.5_pred': over, '<2.5_pred': under})
-
-# df_predictions = pd.concat([df_predictions.reset_index(drop=True), predictions], axis=1)
-# book = Bookmaker(df_predictions, odds='max', stake=5)
-# book.calculate()
-
-# returns = df_predictions[['bet_return']].sum().values
-# returns_over = df_predictions[['bet_return_over']].sum().values
-# print(returns, returns_over)
 
 # res_dict = {}
 # for model, space in models.items():
@@ -1131,8 +1181,15 @@ print(results_df.sort_values(by='Return'))
 
 
 
+# nn_model = NeuralNetworkModel(name='NeuralNet_mae')
+# cb_model = CatBoostRegressor()
+# cb_model.load_model('models//CatBoost_mae', format='cbm')
+# xgb_model = XGBRegressor()  # init model
+# xgb_model.load_model('models//XGB_poisson')
+
+
+
 '''
-ORIGINAL FEATURES
 CatBoost_mae
 Best model params: {'bagging_temperature': 78.58534746356862, 'colsample_bylevel': 0.3632609874748783, 'learning_rate': 0.608282521552185, 'max_depth': 2, 'objective': 'MAE', 'random_strength': 12.688356126720745}
 Best avg loss: 0.867351229770553
@@ -1257,5 +1314,133 @@ Best avg msle: 0.27701163774674004
 Best avg r2: -0.016567145838368935
 Best medae: 0.8020133376121521
 Best learning rate" 0.0012877876870334148
+
+
+
+
+NO TRANSFORMATION
+CatBoost_mae
+Best model params: {'bagging_temperature': 69.32347629336867, 'colsample_bylevel': 0.9042263919423306, 'learning_rate': 0.059135216445649785, 'max_depth': 6, 'objective': 'MAE', 'random_strength': 57.5044030038614}
+Best avg loss: 0.870191801817903
+Best avg Poisson deviance: 1.1595571486227314
+Best avg RMSE: 1.1729592987180506
+Best mae: 0.870191801817903
+Best avg mape: 1285043284909062.0
+Best avg msle: 0.24907335306405007
+Best avg r2: 0.08636610819820872
+Best medae: 0.9649462519649902
+
+NeuralNet_mae
+Best model params: {'activations': ('hard_sigmoid', 'selu', 'tanh'), 'batch': 60, 'loss': 'mae', 'nodes': (14, 44, 104), 'num_layers': 3, 'optimizer': tf.keras.optimizers.Adam(learning_rate=0.0010012101847678423)}
+Best avg loss: 0.860203309725246
+Best avg Poisson deviance: 1.1826411371382328
+Best avg RMSE: 1.1838243567694227
+Best mae: 0.860203309725246
+Best avg mape: 1327063779522472.5
+Best avg msle: 0.2569999918484786
+Best avg r2: 0.06932140358654235
+Best medae: 0.9979725480079651
+Best learning rate" 0.0010012101847678423
+
+XGBoost_poisson
+Best model params: {'colsample_bytree': 0.9, 'eta': 0.2, 'gamma': 1.25, 'max_depth': 3, 'min_child_weight': 6, 'n_estimators': 885, 'objective': 'count:poisson', 'subsample': 0.8}
+Best avg loss: 0.8872984647750854
+Best avg Poisson deviance: 1.1377375692284581
+Best avg RMSE: 1.1641485920269763
+Best mae: 0.8884959173898346
+Best avg mape: 1318069609985741.8
+Best avg msle: 0.24786355063027496
+Best avg r2: 0.10004554525355999
+Best medae: 0.8451168090105057
+
+CatBoost_poisson
+Best model params: {'bagging_temperature': 10.45943130929077, 'colsample_bylevel': 0.4316079607705634, 'learning_rate': 0.1811321733393647, 'max_depth': 4, 'objective': 'Poisson', 'random_strength': 38.80202988079048}
+Best avg loss: 0.8756738901138306
+Best avg Poisson deviance: 1.114488303567074
+Best avg RMSE: 1.1483764115493074
+Best mae: 0.9008554196253915
+Best avg mape: 1470443815709423.8
+Best avg msle: 0.25792567793283294
+Best avg r2: 0.1241870460923902
+Best medae: 0.8207885864489404
+
+NeuralNet_poisson
+Best model params: {'activations': ('sigmoid', 'sigmoid'), 'batch': 994, 'loss': 'poisson', 'nodes': (2, 306), 'num_layers': 2, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.001287)}
+Best avg loss: 0.9405314326286316
+Best avg Poisson deviance: 1.224157566651796
+Best avg RMSE: 1.2169772920312838
+Best mae: 0.9776571804501608
+Best avg mape: 1644342233625140.0
+Best avg msle: 0.2873375897024306
+Best avg r2: 0.016554296086070203
+Best medae: 0.6578687131404877
+
+HistGradientBoost
+Best model params: {'learning_rate': 0.10109485695245424, 'max_leaf_nodes': 3, 'min_samples_leaf': 57}
+Best avg loss: 0.8755381405353546
+Best avg Poisson deviance: 1.1142167902683617
+Best avg RMSE: 1.1478974003153342
+Best mae: 0.9007750488665334
+Best avg mape: 1472622139555473.8
+Best avg msle: 0.25796459486529216
+Best avg r2: 0.12494601303114578
+Best medae: 0.8181261976644996
+
+XGBoost_sqrd_err
+Best model params: {'colsample_bytree': 0.75, 'eta': 0.25, 'gamma': 1.4000000000000001, 'max_depth': 3, 'min_child_weight': 4, 'n_estimators': 291, 'objective': 'reg:squarederror', 'subsample': 0.8500000000000001}
+Best avg loss: 1.3538366352907696
+Best avg Poisson deviance: 1.1382166069014454
+Best avg RMSE: 1.1635377148526194
+Best mae: 0.8874297463584777
+Best avg mape: 1317188436837995.5
+Best avg msle: 0.24797228536579546
+Best avg r2: 0.10097482606051361
+Best medae: 0.8544332385063171
+
+
+NeuralNet_mse
+Best model params: {'activations': ('sigmoid', 'tanh'), 'batch': 308, 'loss': 'mse', 'nodes': (52, 18), 'num_layers': 2, 'optimizer': tf.keras.optimizers.Adam(learning_rate=0.001)}
+Best avg loss: 1.3119802751235328
+Best avg Poisson deviance: 1.1106765851339446
+Best avg RMSE: 1.1454141812578134
+Best mae: 0.8997137295751303
+Best avg mape: 1472651068455487.5
+Best avg msle: 0.2575777145022419
+Best avg r2: 0.12869477801471202
+Best medae: 0.820500023663044
+
+ExtraTrees
+Best model params: {'max_features': 'log2', 'min_samples_leaf': 7, 'min_samples_split': 7, 'n_estimators': 478}
+Best avg loss: 1.318912282274133
+Best avg Poisson deviance: 1.1151041652936946
+Best avg RMSE: 1.1484374809825924
+Best mae: 0.9027866844755217
+Best avg mape: 1483469242147171.2
+Best avg msle: 0.2585737503010774
+Best avg r2: 0.12412554898051564
+Best medae: 0.8132442438836115
+
+CatBoost_huber
+Best model params: {'bagging_temperature': 8.06887605641524, 'colsample_bylevel': 0.4750844452806466, 'learning_rate': 0.08477793380600201, 'max_depth': 4, 'objective': 'Huber:delta=1', 'random_strength': 91.32730657879162}
+Best avg loss: 0.5114836692810059
+Best avg Poisson deviance: 1.128186222680005
+Best avg RMSE: 1.1554092005771577
+Best mae: 0.8903007943333388
+Best avg mape: 1320537987430003.0
+Best avg msle: 0.24807260796840236
+Best avg r2: 0.11345196732275617
+Best medae: 0.8133270033386434
+
+NeuralNet_huber
+Best model params: {'activations': ('sigmoid', 'hard_sigmoid', 'sigmoid'), 'batch': 1002, 'loss': 'huber_loss', 'nodes': (4, 446, 20), 'num_layers': 3, 'optimizer': tf.keras.optimizers.SGD(learning_rate=0.001046389}
+Best avg loss: 0.5632255673408508
+Best avg Poisson deviance: 1.2596914802385706
+Best avg RMSE: 1.2361411962423543
+Best mae: 0.9523753711625803
+Best avg mape: 1472440814117645.0
+Best avg msle: 0.27807662934368754
+Best avg r2: -0.014615806608657744
+Best medae: 0.7880968749523163
+Best learning rate" 0.0010463893413543701
 
 '''
